@@ -3,6 +3,7 @@
 #define SMASH_COMMAND_H_
 using namespace std;
 #include <vector>
+#include <list>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -125,6 +126,8 @@ class ChangeDirCommand : public BuiltInCommand {
     void execute() override;
 };
 
+// pwd - ofek
+
 class GetCurrDirCommand : public BuiltInCommand {
 public:
     GetCurrDirCommand(const char *cmd_line);
@@ -161,10 +164,17 @@ class QuitCommand : public BuiltInCommand {
 class JobsList {
 public:
     class JobEntry {
-        // TODO: Add your data members
+    public:
+        Command* cmd;
+        bool isStopped;
+        int jobId;
+        int pid;
+        string command;
+        JobEntry(Command* cmd, bool isStopped, int jobId, int pid, string command) :
+                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid), command(command) {} //maybe pass by reference the command
+        ~JobEntry() = default; //maybe delete cmd?
     };
-
-    // TODO: Add your data members
+    list<JobEntry*> jobsList;
 public:
     JobsList();
 
@@ -189,8 +199,10 @@ public:
     // TODO: Add extra methods or modify exisitng ones as needed
 };
 
+//jobs - ofek
+
 class JobsCommand : public BuiltInCommand {
-    // TODO: Add your data members
+    JobsList* jobs;
 public:
     JobsCommand(const char *cmd_line, JobsList *jobs);
 
@@ -269,6 +281,7 @@ private:
     int pid;
     string currWorkingDir;
     string prevWorkingDir;
+    JobsList* jobList;
     SmallShell();
 
 public:
@@ -295,6 +308,8 @@ public:
     void setCurrWorkingDir(string newDir);
     string getPrevWorkingDir() const;
     void setPrevWorkingDir(string newDir);
+    JobsList* getJobs();
+
 };
 
 
