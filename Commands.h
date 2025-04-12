@@ -151,7 +151,10 @@ public:
 class JobsList;
 
 class QuitCommand : public BuiltInCommand {
-    // TODO: Add your data members public:
+    // TODO: Add your data members
+public:
+    JobsList* jobs;
+
     QuitCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~QuitCommand() {
@@ -195,6 +198,8 @@ public:
     JobEntry *getLastJob(int *lastJobId);
 
     JobEntry *getLastStoppedJob(int *jobId);
+
+    void printJobsBeforeQuit();
 
     // TODO: Add extra methods or modify exisitng ones as needed
 };

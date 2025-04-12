@@ -115,6 +115,8 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new GetCurrDirCommand(cmd_line);
     } else if (firstWord == "jobs") {
         return new JobsCommand(cmd_line,SmallShell::getInstance().getJobs());
+    } else if (firstWord == "quit") {
+        return new QuitCommand(cmd_line,SmallShell::getInstance().getJobs());
     }
 
 
@@ -151,6 +153,22 @@ void ChpromptCommand::execute()
 
 void JobsCommand::execute() {
     jobs->printJobsList();
+}
+
+QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs):BuiltInCommand(cmd_line),jobs(jobs){}
+
+void QuitCommand::execute() {
+    //check if there is argument for kill
+    if(cmd_segments.size() > 1) {
+        string kill = cmd_segments[1];
+        removeBackgroundSignFromString(kill);
+        if(kill == "kill") {
+            jobs -> removeFinishedJobs();
+            jobs -> printJobsBeforeQuit();
+            jobs -> killAllJobs();
+        }
+    }
+    exit(0);
 }
 
 
@@ -224,9 +242,34 @@ bool isFinished(JobsList::JobEntry* job)
             return false; // Safer to assume it's still running TODO check
         }
     }
-}
+} //check for correctness
 
 void JobsList::removeFinishedJobs() {
     jobsList.remove_if(isFinished);
 }
+
+void JobsList::printJobsBeforeQuit()
+{
+    //remove finished jobs before printing the jobs.
+    removeFinishedJobs();
+    std::cout << "smash: sending SIGKILL signal to "<<jobsList.size()<<" jobs:" << std::endl;
+    for(auto listIt=jobsList.begin(); listIt!=jobsList.end();++listIt)
+    {
+        JobsList::JobEntry* job=*listIt;
+        std::cout << job->pid <<": " << job->command  << std::endl;
+    }
+} //check for correctness
+
+void JobsList::killAllJobs()
+{
+    for(auto listIt=jobsList.begin(); listIt!=jobsList.end();++listIt)
+    {
+        if (*listIt) {  // Check for null pointers
+            kill((*listIt)->pid, SIGKILL);
+            delete *listIt;
+        }
+    }
+    jobsList.clear();  // check if we need to do clear
+}
+
 
