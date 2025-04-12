@@ -74,7 +74,8 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+// TODO: Add your implementation for classes in Commands.h
+
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
@@ -105,13 +106,127 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     return new ExternalCommand(cmd_line);
   }
   */
+    std::string cmd_s = _trim(std::string(cmd_line));
+    std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+    // TODO: change to factory
+    if (firstWord == "chprompt") {
+        return new ChpromptCommand(cmd_line);
+    } else if (firstWord =="pwd") {
+        return new GetCurrDirCommand(cmd_line);
+    } else if (firstWord == "jobs") {
+        return new JobsCommand(cmd_line,SmallShell::getInstance().getJobs());
+    }
+
+
     return nullptr;
 }
 
+// execute commands //
+
+void GetCurrDirCommand::execute() {
+    cout << SmallShell::getInstance().getCurrWorkingDir() << endl;
+}
+
+void ChpromptCommand::execute()
+{
+    if(cmd_segments.size()>1)//there was a new prompt
+    {
+        string prompt=cmd_segments[1];
+        removeBackgroundSignFromString(prompt);
+        //if prompt empty, set default prompt
+        if(prompt.empty()) {
+            newSmashPrompt="smash";
+        }
+        //if prompt is not empty, set new prompt
+        else {
+            newSmashPrompt=prompt;
+        }
+    }
+    else
+    {
+        newSmashPrompt="smash";
+    }
+    SmallShell::getInstance().setPrompt(newSmashPrompt);
+}
+
+void JobsCommand::execute() {
+    jobs->printJobsList();
+}
+
+
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
-    // for example:
-    // Command* cmd = CreateCommand(cmd_line);
-    // cmd->execute();
+    Command* cmd = CreateCommand(cmd_line);
+    //if cmd is nullptr, it means that the command is not recognized
+    if(cmd == nullptr) {
+        return;
+    }
+    cmd->execute();
+    //delete cmd for memory leak prevention
+    delete cmd;
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
+
+
+// TODO: small shell implementation of functions and etc
+
+void SmallShell::setPrompt(string newPrompt)
+{
+    prompt=newPrompt;
+}
+
+//helper function to remove background sign from string and not char*
+void removeBackgroundSignFromString(std::string& cmd_line) {
+    char* char_cmd = new char[cmd_line.length() + 1];
+    strcpy(char_cmd, cmd_line.c_str());
+
+    _removeBackgroundSign(char_cmd);
+
+    cmd_line = std::string(char_cmd);
+    delete[] char_cmd;
+}
+
+// jobs related functions //
+
+void JobsList::printJobsList() {
+    removeFinishedJobs();
+    for(JobsList::JobEntry* job : jobsList) {
+        cout << "[" <<job->jobId << "] " <<job->command << " : " <<job->pid << endl; //print jobs, need to check if theyre sorted
+    }
+}
+
+bool isFinished(JobsList::JobEntry* job)
+{
+    if(job == nullptr)
+    {
+        return true;
+    }
+
+    int status;
+    pid_t result = waitpid(job->pid, &status, WNOHANG);
+
+    if (result > 0) {
+        // Process finished, interpret exit status if needed
+        return true;
+    }
+    else if (result == 0) {
+        // Process is still running
+        return false;
+    }
+    else {
+        // Error occurred (result is -1)
+        if (errno == ECHILD) {
+            // No child process exists - consider it finished
+            return true;
+        } else {
+            // Other error
+            perror("waitpid");
+            return false; // Safer to assume it's still running TODO check
+        }
+    }
+}
+
+void JobsList::removeFinishedJobs() {
+    jobsList.remove_if(isFinished);
+}
+

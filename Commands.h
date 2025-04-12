@@ -1,14 +1,19 @@
 // Ver: 10-4-2025
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
-
+using namespace std;
 #include <vector>
+#include <list>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 
 class Command {
     // TODO: Add your data members
+protected:
+    vector<string> cmd_segments;
+    const char* cmd_line;
+    string alias;
 public:
     Command(const char *cmd_line);
 
@@ -19,6 +24,11 @@ public:
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
+    /*string getPath();
+    void setPath(string path);*/
+    string printCommant();
+    bool hasAlias();
+    void setAlias(string command);
 };
 
 class BuiltInCommand : public Command {
@@ -27,6 +37,16 @@ public:
 
     virtual ~BuiltInCommand() {
     }
+};
+
+//chprompt - ofek
+
+class ChpromptCommand : public BuiltInCommand {
+public:
+    string newSmashPrompt;
+    ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
+    virtual ~ChpromptCommand() {}
+    void execute() override;
 };
 
 class ExternalCommand : public Command {
@@ -103,6 +123,8 @@ class ChangeDirCommand : public BuiltInCommand {
     void execute() override;
 };
 
+// pwd - ofek
+
 class GetCurrDirCommand : public BuiltInCommand {
 public:
     GetCurrDirCommand(const char *cmd_line);
@@ -139,10 +161,17 @@ class QuitCommand : public BuiltInCommand {
 class JobsList {
 public:
     class JobEntry {
-        // TODO: Add your data members
+    public:
+        Command* cmd;
+        bool isStopped;
+        int jobId;
+        pid_t pid;
+        string command;
+        JobEntry(Command* cmd, bool isStopped, int jobId, int pid, string command) :
+                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid) ,command(command) {} //maybe pass by reference the command
+        ~JobEntry() = default; //maybe delete cmd?
     };
-
-    // TODO: Add your data members
+    list<JobEntry*> jobsList;
 public:
     JobsList();
 
@@ -167,8 +196,10 @@ public:
     // TODO: Add extra methods or modify exisitng ones as needed
 };
 
+//jobs - ofek
+
 class JobsCommand : public BuiltInCommand {
-    // TODO: Add your data members
+    JobsList* jobs;
 public:
     JobsCommand(const char *cmd_line, JobsList *jobs);
 
@@ -243,6 +274,11 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
+    string prompt;
+    int pid;
+    string currWorkingDir;
+    string prevWorkingDir;
+    JobsList* jobList;
     SmallShell();
 
 public:
@@ -261,7 +297,19 @@ public:
 
     void executeCommand(const char *cmd_line);
 
+
     // TODO: add extra methods as needed
+    void setPrompt(string newPrompt);
+    string getPrompt() const;
+    string getCurrWorkingDir() const;
+    void setCurrWorkingDir(string newDir);
+    string getPrevWorkingDir() const;
+    void setPrevWorkingDir(string newDir);
+    JobsList* getJobs();
+
 };
+
+
+void removeBackgroundSignFromString(std::string& cmd_line);
 
 #endif //SMASH_COMMAND_H_
