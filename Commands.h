@@ -13,7 +13,6 @@ class Command {
 protected:
     vector<string> cmd_segments;
     const char* cmd_line;
-    int pId;
     string alias;
 public:
     Command(const char *cmd_line);
@@ -25,10 +24,8 @@ public:
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
-    int getProcessPid();
-    void setProcessId(int pid);
-    string getPath();
-    void setPath(string path);
+    /*string getPath();
+    void setPath(string path);*/
     string printCommant();
     bool hasAlias();
     void setAlias(string command);
@@ -171,10 +168,10 @@ public:
         Command* cmd;
         bool isStopped;
         int jobId;
-        int pid;
+        pid_t pid;
         string command;
         JobEntry(Command* cmd, bool isStopped, int jobId, int pid, string command) :
-                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid), command(command) {} //maybe pass by reference the command
+                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid) ,command(command) {} //maybe pass by reference the command
         ~JobEntry() = default; //maybe delete cmd?
     };
     list<JobEntry*> jobsList;
