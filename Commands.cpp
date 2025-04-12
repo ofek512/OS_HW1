@@ -22,6 +22,9 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define FUNC_EXIT()
 #endif
 
+#define COMMAND_MAX_LENGTH (200)
+#define COMMAND_MAX_ARGS (20)
+
 string _ltrim(const std::string &s) {
     size_t start = s.find_first_not_of(WHITESPACE);
     return (start == std::string::npos) ? "" : s.substr(start);
@@ -56,6 +59,13 @@ bool _isBackgroundComamnd(const char *cmd_line) {
     return str[str.find_last_not_of(WHITESPACE)] == '&';
 }
 
+void free_args(char** args, int num_of_args){
+    for(int i = 0; i < num_of_args || args[i] != nullptr; i++){
+        free(args[i]);
+    }
+    //free(args); //need to think
+}
+
 void _removeBackgroundSign(char *cmd_line) {
     const string str(cmd_line);
     // find last character other than spaces
@@ -77,12 +87,15 @@ void _removeBackgroundSign(char *cmd_line) {
 // TODO: Add your implementation for classes in Commands.h
 
 
-SmallShell::SmallShell() {
-// TODO: add your implementation
-}
+JobsList SmallShell::jobList;
+
+SmallShell::SmallShell(): prompt("smash"), pid(getpid()),
+                          current_process(-1),
+                          prevWorkingDir(nullptr){}
 
 SmallShell::~SmallShell() {
-// TODO: add your implementation
+    if(prevWorkingDir) free(prevWorkingDir);
+    //should we do smth else?
 }
 
 /**
@@ -112,9 +125,13 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     if (firstWord == "chprompt") {
         return new ChpromptCommand(cmd_line);
     } else if (firstWord =="pwd") {
-        return new GetCurrDirCommand(cmd_line);
+        //return new GetCurrDirCommand(cmd_line);
     } else if (firstWord == "jobs") {
-        return new JobsCommand(cmd_line,SmallShell::getInstance().getJobs());
+        //return new JobsCommand(cmd_line,SmallShell::getInstance().getJobs());
+    } else if (firstWord == "showpid") {
+        return new ShowPidCommand(cmd_line);
+    } else if(firstWord == "cd") {
+        return new ChangeDirCommand(cmd_line, &prevWorkingDir);
     }
 
 
@@ -123,31 +140,11 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
 // execute commands //
 
-void GetCurrDirCommand::execute() {
+/*void GetCurrDirCommand::execute() {
     cout << SmallShell::getInstance().getCurrWorkingDir() << endl;
-}
+}*/
 
-void ChpromptCommand::execute()
-{
-    if(cmd_segments.size()>1)//there was a new prompt
-    {
-        string prompt=cmd_segments[1];
-        removeBackgroundSignFromString(prompt);
-        //if prompt empty, set default prompt
-        if(prompt.empty()) {
-            newSmashPrompt="smash";
-        }
-        //if prompt is not empty, set new prompt
-        else {
-            newSmashPrompt=prompt;
-        }
-    }
-    else
-    {
-        newSmashPrompt="smash";
-    }
-    SmallShell::getInstance().setPrompt(newSmashPrompt);
-}
+
 
 void JobsCommand::execute() {
     jobs->printJobsList();
@@ -186,7 +183,9 @@ void removeBackgroundSignFromString(std::string& cmd_line) {
     delete[] char_cmd;
 }
 
-// jobs related functions //
+/////////////////////////////--------------Job List implementation-------//////////////////////////////
+
+JobsList::JobsList(): jobsList(), job_map(), max_id(1){}
 
 void JobsList::printJobsList() {
     removeFinishedJobs();
@@ -230,3 +229,82 @@ void JobsList::removeFinishedJobs() {
     jobsList.remove_if(isFinished);
 }
 
+
+/////////////////////////////--------------Built-in commands-------//////////////////////////////
+
+BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
+    //TODO: need to add check for whether command is background
+}
+
+void ChpromptCommand::execute()
+{
+    if(cmd_segments.size()>1)//there was a new prompt
+    {
+        string prompt=cmd_segments[1];
+        removeBackgroundSignFromString(prompt);
+        //if prompt empty, set default prompt
+        if(prompt.empty()) {
+            newSmashPrompt="smash";
+        }
+            //if prompt is not empty, set new prompt
+        else {
+            newSmashPrompt=prompt;
+        }
+    }
+    else
+    {
+        newSmashPrompt="smash";
+    }
+    SmallShell::getInstance().setPrompt(newSmashPrompt);
+}
+
+/* ShowPid command */
+ShowPidCommand::ShowPidCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+
+void ShowPidCommand::execute() {
+    SmallShell &shell = SmallShell::getInstance();
+    cout << "smash pid is " << shell.pid << endl;
+    return;
+}
+
+/* cd command */
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, char **plastPwd): BuiltInCommand(cmd_line),
+                                                                           plastPwd(plastPwd){}
+void ChangeDirCommand::execute() {
+    char* args_arr[COMMAND_MAX_ARGS]; // I'm not sure
+    char** args = args_arr;
+    int num_of_args = _parseCommandLine(this->cmd_line, args);
+    if(!args){
+        // We can don't check due to the assumption that malloc doesn't fail?
+    }
+    if(num_of_args > 2){
+        cerr << "smash error: cd: too many arguments" << endl;
+    } else if(num_of_args == 1){
+    } else {
+        string path = args[1];
+        char* current_path = getcwd(NULL, 0); //check whether it's working
+
+        if(path == "-"){
+            if(!(*plastPwd)){
+                cout << "smash error: cd: OLDPWD not set" << endl;
+                free(current_path);
+            } else {
+                if(chdir(*plastPwd) == -1){
+                    cout << "smash error: cd: chdir failure" << endl;
+                    free(current_path);
+                    return;
+                } else {
+                    *plastPwd = current_path; // Should free previous path?
+                }
+            }
+        } else {
+            if(chdir(args[1]) == -1){
+                cout << "smash error: cd: chdir failure" << endl;
+                free(current_path);
+            } else {
+                *plastPwd = current_path; //should free previous path?
+            }
+        }
+    }
+    free_args(args, num_of_args);
+}

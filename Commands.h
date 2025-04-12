@@ -4,6 +4,7 @@
 using namespace std;
 #include <vector>
 #include <list>
+#include <unordered_map>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -15,9 +16,9 @@ protected:
     const char* cmd_line;
     string alias;
 public:
-    Command(const char *cmd_line);
+    explicit Command(const char *cmd_line): cmd_line(cmd_line){};
 
-    virtual ~Command();
+    virtual ~Command() = default;
 
     virtual void execute() = 0;
 
@@ -26,14 +27,14 @@ public:
     // TODO: Add your extra methods if needed
     /*string getPath();
     void setPath(string path);*/
-    string printCommant();
+    string printCommand();
     bool hasAlias();
     void setAlias(string command);
 };
 
 class BuiltInCommand : public Command {
 public:
-    BuiltInCommand(const char *cmd_line);
+    explicit BuiltInCommand(const char *cmd_line);
 
     virtual ~BuiltInCommand() {
     }
@@ -114,11 +115,12 @@ public:
 };
 
 class ChangeDirCommand : public BuiltInCommand {
+public:
     // TODO: Add your data members public:
+    char** plastPwd;
     ChangeDirCommand(const char *cmd_line, char **plastPwd);
 
-    virtual ~ChangeDirCommand() {
-    }
+    virtual ~ChangeDirCommand() = default;
 
     void execute() override;
 };
@@ -137,10 +139,9 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    ShowPidCommand(const char *cmd_line);
+    explicit ShowPidCommand(const char *cmd_line);
 
-    virtual ~ShowPidCommand() {
-    }
+    virtual ~ShowPidCommand() = default;
 
     void execute() override;
 };
@@ -172,10 +173,14 @@ public:
         ~JobEntry() = default; //maybe delete cmd?
     };
     list<JobEntry*> jobsList;
-public:
+
+    std::unordered_map<pid_t, JobEntry*> job_map; //I think we need to add it for more efficient search
+
+    int max_id;
+
     JobsList();
 
-    ~JobsList();
+    ~JobsList() = default;
 
     void addJob(Command *cmd, bool isStopped = false);
 
@@ -275,13 +280,14 @@ class SmallShell {
 private:
     // TODO: Add your data members
     string prompt;
-    int pid;
-    string currWorkingDir;
-    string prevWorkingDir;
-    JobsList* jobList;
+    pid_t current_process;
+    //string currWorkingDir;
+    char* prevWorkingDir;
+    static JobsList jobList;
     SmallShell();
 
 public:
+    pid_t pid;
     Command *CreateCommand(const char *cmd_line);
 
     SmallShell(SmallShell const &) = delete; // disable copy ctor
