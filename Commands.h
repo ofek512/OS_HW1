@@ -1,7 +1,7 @@
 // Ver: 10-4-2025
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
-
+using namespace std;
 #include <vector>
 
 #define COMMAND_MAX_LENGTH (200)
@@ -9,6 +9,11 @@
 
 class Command {
     // TODO: Add your data members
+protected:
+    vector<string> cmd_segments;
+    const char* cmd_line;
+    int pId;
+    string alias;
 public:
     Command(const char *cmd_line);
 
@@ -19,6 +24,13 @@ public:
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
+    int getProcessPid();
+    void setProcessId(int pid);
+    string getPath();
+    void setPath(string path);
+    string printCommant();
+    bool hasAlias();
+    void setAlias(string command);
 };
 
 class BuiltInCommand : public Command {
@@ -27,6 +39,16 @@ public:
 
     virtual ~BuiltInCommand() {
     }
+};
+
+//chprompt - ofek
+
+class ChpromptCommand : public BuiltInCommand {
+public:
+    string newSmashPrompt;
+    ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
+    virtual ~ChpromptCommand() {}
+    void execute() override;
 };
 
 class ExternalCommand : public Command {
@@ -243,6 +265,8 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
+    string prompt;
+    int pid;
     SmallShell();
 
 public:
@@ -261,7 +285,12 @@ public:
 
     void executeCommand(const char *cmd_line);
 
+
     // TODO: add extra methods as needed
+    void setPrompt(string newPrompt);
 };
+
+
+void removeBackgroundSignFromString(std::string& cmd_line);
 
 #endif //SMASH_COMMAND_H_

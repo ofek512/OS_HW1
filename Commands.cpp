@@ -74,7 +74,27 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+// TODO: Add your implementation for classes in Commands.h
+
+void ChpromptCommand::execute()
+{
+    if(cmd_segments.size()>1)//there was a new prompt
+    {
+        string prompt=cmd_segments[1];
+        removeBackgroundSignFromString(prompt);
+        if(prompt.empty())
+        {
+            newSmashPrompt="smash";
+            return;
+        }
+        newSmashPrompt=prompt;
+    }
+    else
+    {
+        newSmashPrompt="smash";
+    }
+    SmallShell::getInstance().setPrompt(newSmashPrompt);
+}
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
@@ -105,6 +125,14 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     return new ExternalCommand(cmd_line);
   }
   */
+    std::string cmd_s = _trim(std::string(cmd_line));
+    std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
+    if (firstWord.compare("chprompt") == 0) {
+        return new ChpromptCommand(cmd_line);
+    }
+
+
     return nullptr;
 }
 
@@ -114,4 +142,23 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // Command* cmd = CreateCommand(cmd_line);
     // cmd->execute();
     // Please note that you must fork smash process for some commands (e.g., external commands....)
+}
+
+
+void removeBackgroundSignFromString(std::string& cmd_line) {
+    char* char_cmd = new char[cmd_line.length() + 1];
+    strcpy(char_cmd, cmd_line.c_str());
+
+    _removeBackgroundSign(char_cmd);
+
+    cmd_line = std::string(char_cmd);
+    delete[] char_cmd;
+}
+
+
+// TODO: small shell
+
+void SmallShell::setPrompt(string newPrompt)
+{
+    prompt=newPrompt;
 }
