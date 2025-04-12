@@ -267,6 +267,8 @@ private:
     // TODO: Add your data members
     string prompt;
     int pid;
+    string currWorkingDir;
+    string prevWorkingDir;
     SmallShell();
 
 public:
@@ -288,6 +290,11 @@ public:
 
     // TODO: add extra methods as needed
     void setPrompt(string newPrompt);
+    string getPrompt() const;
+    string getCurrWorkingDir() const;
+    void setCurrWorkingDir(string newDir);
+    string getPrevWorkingDir() const;
+    void setPrevWorkingDir(string newDir);
 };
 
 

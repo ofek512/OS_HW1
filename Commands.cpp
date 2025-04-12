@@ -76,25 +76,6 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h
 
-void ChpromptCommand::execute()
-{
-    if(cmd_segments.size()>1)//there was a new prompt
-    {
-        string prompt=cmd_segments[1];
-        removeBackgroundSignFromString(prompt);
-        if(prompt.empty())
-        {
-            newSmashPrompt="smash";
-            return;
-        }
-        newSmashPrompt=prompt;
-    }
-    else
-    {
-        newSmashPrompt="smash";
-    }
-    SmallShell::getInstance().setPrompt(newSmashPrompt);
-}
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
@@ -127,13 +108,43 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
   */
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-
-    if (firstWord.compare("chprompt") == 0) {
+    // TODO: change to factory
+    if (firstWord == "chprompt") {
         return new ChpromptCommand(cmd_line);
+    } else if (firstWord ==("pwd")) {
+        return new GetCurrDirCommand(cmd_line);
     }
 
 
     return nullptr;
+}
+
+// execute commands //
+
+void GetCurrDirCommand::execute() {
+    cout << SmallShell::getInstance().getCurrWorkingDir() << endl;
+}
+
+void ChpromptCommand::execute()
+{
+    if(cmd_segments.size()>1)//there was a new prompt
+    {
+        string prompt=cmd_segments[1];
+        removeBackgroundSignFromString(prompt);
+        //if prompt empty, set default prompt
+        if(prompt.empty()) {
+            newSmashPrompt="smash";
+        }
+        //if prompt is not empty, set new prompt
+        else {
+            newSmashPrompt=prompt;
+        }
+    }
+    else
+    {
+        newSmashPrompt="smash";
+    }
+    SmallShell::getInstance().setPrompt(newSmashPrompt);
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
@@ -144,7 +155,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
-
+//helper function to remove background sign from string and not char*
 void removeBackgroundSignFromString(std::string& cmd_line) {
     char* char_cmd = new char[cmd_line.length() + 1];
     strcpy(char_cmd, cmd_line.c_str());
@@ -154,6 +165,7 @@ void removeBackgroundSignFromString(std::string& cmd_line) {
     cmd_line = std::string(char_cmd);
     delete[] char_cmd;
 }
+
 
 
 // TODO: small shell
