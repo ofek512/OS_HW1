@@ -6,6 +6,8 @@
 #include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
+#include <algorithm>
+#include <regex>
 
 using namespace std;
 
@@ -77,12 +79,21 @@ void _removeBackgroundSign(char *cmd_line) {
 // TODO: Add your implementation for classes in Commands.h
 
 
-SmallShell::SmallShell() {
-// TODO: add your implementation
+SmallShell::SmallShell() : aliasMap(), sortedAlias(), prompt("smash"), pid(getPid()), currWorkingDir(getCurrWorkingDir()), prevWorkingDir(""), jobList(new JobsList()), commands() {
+    createCommandVector();
+    // map<string,string> aliasMap;
+    // vector<string> sortedAlias;
+    // string prompt;
+    // int pid;
+    // string currWorkingDir;
+    // string prevWorkingDir;
+    // JobsList* jobList;
+    // vector<string> commands;
 }
 
 SmallShell::~SmallShell() {
 // TODO: add your implementation
+    delete jobList;
 }
 
 /**
@@ -117,6 +128,8 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new JobsCommand(cmd_line,SmallShell::getInstance().getJobs());
     } else if (firstWord == "quit") {
         return new QuitCommand(cmd_line,SmallShell::getInstance().getJobs());
+    } else if (firstWord == "alias") {
+        return new AliasCommand(cmd_line);
     }
 
 
@@ -171,9 +184,61 @@ void QuitCommand::execute() {
     exit(0);
 }
 
+void AliasCommand::execute() {
+    // Just 'alias' without arguments - list all aliases AAAAAAAAAAAAAAAAAAAA
+    if (cmd_segments.size() == 1) {
+        std::vector<std::string> aliases;
+        SmallShell::getInstance().getAllAlias(aliases);
+        for (const std::string& alias : aliases) {
+            std::cout << alias << std::endl;
+        }
+        return;
+    }
+
+    // Construct the full command string
+    std::string fullCommand;
+    for (size_t i = 0; i < cmd_segments.size(); i++) {
+        fullCommand += cmd_segments[i];
+        if (i < cmd_segments.size() - 1) {
+            fullCommand += " ";
+        }
+    }
+
+    if (this->backGround) {
+        removeBackgroundSignFromString(fullCommand);
+    }
+
+    // Validate format with regex
+    static const std::regex aliasPattern("^alias ([a-zA-Z0-9_]+)='([^']*)'$");
+    std::smatch matches;
+
+    if (!std::regex_search(fullCommand, matches, aliasPattern)) {
+        std::cerr << "smash error: alias: invalid alias format" << std::endl;
+        return;
+    }
+
+    // Extract alias name and command from regex matches
+    std::string aliasName = matches[1];
+    std::string aliasCommand = matches[2];
+
+    // Check if alias already exists
+    if (SmallShell::getInstance().getAlias(aliasName).compare("") != 0) {
+        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        return;
+    }
+
+    // Check if alias name is a reserved command, TODO check if correct
+    if (SmallShell::getInstance().validCommand(aliasName)) {
+        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        return;
+    }
+
+    // Create the alias
+    SmallShell::getInstance().setAlias(aliasName, aliasCommand);
+}
+
 
 void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add your implementation here
     Command* cmd = CreateCommand(cmd_line);
     //if cmd is nullptr, it means that the command is not recognized
     if(cmd == nullptr) {
@@ -272,4 +337,40 @@ void JobsList::killAllJobs()
     jobsList.clear();  // check if we need to do clear
 }
 
+void SmallShell::getAllAlias(vector<string> &aliases) {
+    for(auto element :  sortedAlias) {
+        aliases.push_back(element + "='"+aliasMap[element]+"'");
+    }
+}
 
+string SmallShell::getAlias(string name) {
+    if(aliasMap.find(name) == aliasMap.end()) {
+        return "";
+    } else {
+        return aliasMap[name];
+    }
+}
+
+bool SmallShell::validCommand(string name) {
+    for (string command : commands) {
+        if (command == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+//todo important to add this to constructor of smallshell
+void SmallShell::createCommandVector() {
+    commands = {"chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
+                     "kill", "unalias", "alias", "unsetenv", "watchproc"};
+}
+
+int SmallShell::getPid() {
+    return getpid();
+}
+
+void SmallShell::setAlias(string name, string command) {
+    aliasMap[name] = command;
+    sortedAlias.push_back(name);
+}

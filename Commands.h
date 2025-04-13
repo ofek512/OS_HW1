@@ -4,6 +4,7 @@
 using namespace std;
 #include <vector>
 #include <list>
+#include <map>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -11,11 +12,12 @@ using namespace std;
 class Command {
     // TODO: Add your data members
 protected:
+    bool backGround;
     vector<string> cmd_segments;
     const char* cmd_line;
     string alias;
 public:
-    Command(const char *cmd_line);
+    Command(const char *cmd_line, string alias = "");
 
     virtual ~Command();
 
@@ -279,11 +281,14 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
+    map<string,string> aliasMap;
+    vector<string> sortedAlias;
     string prompt;
     int pid;
     string currWorkingDir;
     string prevWorkingDir;
     JobsList* jobList;
+    vector<string> commands;
     SmallShell();
 
 public:
@@ -304,6 +309,7 @@ public:
 
 
     // TODO: add extra methods as needed
+    int getPid();
     void setPrompt(string newPrompt);
     string getPrompt() const;
     string getCurrWorkingDir() const;
@@ -311,7 +317,11 @@ public:
     string getPrevWorkingDir() const;
     void setPrevWorkingDir(string newDir);
     JobsList* getJobs();
-
+    void getAllAlias(std::vector<std::string>& aliases);
+    string getAlias(string name);
+    bool validCommand(string name);
+    void createCommandVector();
+    void setAlias(string name, string command);
 };
 
 
