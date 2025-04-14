@@ -49,7 +49,7 @@ public:
     ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
     virtual ~ChpromptCommand() {}
     void execute() override;
-};
+}; // DONE
 
 class ExternalCommand : public Command {
 public:
@@ -124,7 +124,7 @@ public:
     virtual ~ChangeDirCommand() = default;
 
     void execute() override;
-};
+}; // DONE
 
 // pwd - ofek
 
@@ -136,7 +136,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 class ShowPidCommand : public BuiltInCommand {
 public:
@@ -145,7 +145,7 @@ public:
     virtual ~ShowPidCommand() = default;
 
     void execute() override;
-};
+}; // DONE
 
 class JobsList;
 
@@ -160,7 +160,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 
 class JobsList {
@@ -173,12 +173,13 @@ public:
         pid_t pid;
         string command;
         JobEntry(Command* cmd, bool isStopped, int jobId, int pid, string command) :
-                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid) ,command(command) {} //maybe pass by reference the command
+                cmd(cmd), isStopped(isStopped), jobId(jobId), pid(pid), command(command) {} //maybe pass by reference the command
         ~JobEntry() = default; //maybe delete cmd?
+        bool operator<(const JobEntry& other) const;
     };
     list<JobEntry*> jobsList;
 
-    std::unordered_map<pid_t, JobEntry*> job_map; //I think we need to add it for more efficient search
+    std::unordered_map<int, JobEntry*> job_map; //I think we need to add it for more efficient search
 
     int max_id;
 
@@ -186,7 +187,7 @@ public:
 
     ~JobsList() = default;
 
-    void addJob(Command *cmd, bool isStopped = false);
+    void addJob(Command *cmd, pid_t pid, bool isStopped = false);
 
     void printJobsList();
 
@@ -218,7 +219,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 class KillCommand : public BuiltInCommand {
     // TODO: Add your data members
@@ -250,7 +251,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 class UnAliasCommand : public BuiltInCommand {
 public:
@@ -288,15 +289,13 @@ private:
     map<string,string> aliasMap;
     vector<string> sortedAlias;
     string prompt;
-    pid_t current_process;
-    //string currWorkingDir;
     char* prevWorkingDir;
-    //static JobsList jobList;
     JobsList* jobList;
     vector<string> commands;
     SmallShell();
 
 public:
+    pid_t current_process;
     pid_t pid;
     Command *CreateCommand(const char *cmd_line);
 

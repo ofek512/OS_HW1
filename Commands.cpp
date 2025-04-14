@@ -86,6 +86,17 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+char** init_args(){
+    char** args = (char**) malloc(COMMAND_MAX_ARGS * sizeof(char**));
+    if(!args){
+        return nullptr;
+    }
+    for(int i = 0; i < COMMAND_MAX_ARGS; i++){
+        args[i] = nullptr;
+    }
+    return args;
+}
+
 // TODO: Add your implementation for classes in Commands.h
 
 
@@ -94,7 +105,8 @@ void _removeBackgroundSign(char *cmd_line) {
 /*SmallShell::SmallShell(): prompt("smash"), pid(getpid()),
                           current_process(-1),
                           prevWorkingDir(nullptr){}*/
-SmallShell::SmallShell() : aliasMap(), sortedAlias(), prompt("smash"),current_process(-1), prevWorkingDir(nullptr), jobList(new JobsList()), commands(), pid(getpid()) {
+SmallShell::SmallShell() : aliasMap(), sortedAlias(), prompt("smash"),current_process(-1), prevWorkingDir(nullptr),
+                           jobList(new JobsList()), commands(), pid(getpid()) {
     createCommandVector();
 /*    map<string,string> aliasMap;
     vector<string> sortedAlias;
@@ -194,7 +206,7 @@ void removeBackgroundSignFromString(std::string& cmd_line) {
 
 /////////////////////////////--------------Job List implementation-------//////////////////////////////
 
-JobsList::JobsList(): jobsList(), job_map(), max_id(1){}
+JobsList::JobsList(): jobsList(), job_map(), max_id(-1){}
 
 void JobsList::printJobsList() {
     removeFinishedJobs();
@@ -260,6 +272,59 @@ void JobsList::killAllJobs()
         }
     }
     jobsList.clear();  // check if we need to do clear
+}
+
+void JobsList::removeJobById(int jobId) {
+    if(job_map.find(jobId) == job_map.end()) {
+        cerr << "removeJobById error: no job with id = " << jobId << endl;
+        return;
+    }
+    auto job = job_map[jobId];
+    // Deletion from map
+    job_map.erase(jobId);
+    // Deletion from list
+    for(auto it = jobsList.begin(); it != jobsList.end(); it++) {
+        if ((*it)->jobId == jobId) {
+            jobsList.erase(it);
+            // Update maxId
+            if (max_id == jobId) {
+                jobsList.sort();
+                max_id = jobsList.empty() ? -1 : jobsList.back()->jobId;
+            }
+            delete job;
+            break;
+        }
+    }
+} // Need to check for correctness
+
+void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
+    removeFinishedJobs();
+    int it = 0;
+    while(job_map[it] != nullptr && it++ != 100){}
+
+    if(it == 100){
+        cerr << "addJob error: reached limit of processes" << endl;
+        return;
+    }
+    JobEntry* job_to_insert = new JobEntry(cmd, isStopped, it, pid, "");//im not sure how to convert it to string correcrtly
+    job_map[it] = job_to_insert;
+    jobsList.push_back(job_to_insert);
+
+    if(max_id < it) {
+        max_id = it;
+    }
+} // need to check correctness
+
+bool JobsList::JobEntry::operator<(const JobsList::JobEntry &other) const{
+    return this->jobId < other.jobId;
+}
+
+JobsList::JobEntry* JobsList::getJobById(int jobId) {
+    if(job_map.find(jobId) == job_map.end()){
+        cerr << "getJobById error: no job with jobId = " << jobId << endl;
+        return nullptr;
+    }
+    return job_map[jobId];
 }
 
 JobsList* SmallShell::getJobs() {
@@ -342,8 +407,7 @@ void ShowPidCommand::execute() {
 ChangeDirCommand::ChangeDirCommand(const char *cmd_line, char **plastPwd): BuiltInCommand(cmd_line),
                                                                            plastPwd(plastPwd){}
 void ChangeDirCommand::execute() {
-    char* args_arr[COMMAND_MAX_ARGS]; // I'm not sure
-    char** args = args_arr;
+    char** args = init_args();
     int num_of_args = _parseCommandLine(this->cmd_line, args);
     if(!args){
         // We can don't check due to the assumption that malloc doesn't fail?
@@ -408,7 +472,7 @@ void AliasCommand::execute() {
     }
 
     // Validate format with regex
-    static const std::regex aliasPattern("^alias ([a-zA-Z0-9_]+)='([^']*)'$");
+    static const std::regex aliasPattern("^alias+([a-zA-Z0-9_]+)='(.*)'$");
     std::smatch matches;
 
     if (!std::regex_search(fullCommand, matches, aliasPattern)) {
@@ -470,4 +534,49 @@ JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
 
 void JobsCommand::execute() {
     SmallShell::getInstance().getJobs()->printJobsList();
+}
+
+// ForeGround command
+ForegroundCommand::ForegroundCommand(const char *cmd_line, JobsList *jobs): BuiltInCommand(cmd_line) {}
+
+void ForegroundCommand::execute() {
+    char** args = init_args();
+
+    if(!args){
+        cerr << "Malloc failed" << endl;
+        return;
+    }
+
+    SmallShell& smash = SmallShell::getInstance();
+    int num_of_args = _parseCommandLine(this->cmd_line, args);
+    if(num_of_args > 2){
+        cerr << "Smash error: fg: invalid arguments" << endl;
+        return;
+    } else if(num_of_args == 1){
+        if(smash.getJobs()->max_id == -1){
+            cerr << "smash error: fg: jobs list is empty" << endl;
+            free_args(args, num_of_args);
+            return;
+        }
+        JobsList::JobEntry* max_id_job = smash.getJobs()->job_map[smash.getJobs()->max_id];
+        if(max_id_job->isStopped){
+            if(kill(max_id_job->pid, SIGCONT) == -1){
+                perror("smash error: kill failed");
+                free_args(args, num_of_args);
+                return;
+            }
+        }
+        cout << max_id_job->command << " " << max_id_job->pid << endl;
+        smash.getJobs()->removeJobById(max_id_job->jobId);
+        smash.current_process = max_id_job->pid;
+
+        int status;
+        if(waitpid(max_id_job->pid, &status, 0) == -1){
+            perror("smash errorL waitpid failed");
+            free_args(args, num_of_args);
+            return;
+        }
+    } else {
+        //TODO: finish
+    }
 }
