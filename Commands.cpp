@@ -162,7 +162,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
 
 void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add your implementation here
+    // TODO: Add alias support
     Command* cmd = CreateCommand(cmd_line);
     //if cmd is nullptr, it means that the command is not recognized
     if(cmd == nullptr) {
@@ -175,7 +175,6 @@ void SmallShell::executeCommand(const char *cmd_line) {
 }
 
 
-// TODO: small shell implementation of functions and etc
 
 void SmallShell::setPrompt(string newPrompt)
 {
