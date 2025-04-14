@@ -117,6 +117,7 @@ SmallShell::~SmallShell() {
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
+
 Command *SmallShell::CreateCommand(const char *cmd_line) {
     // For example:
   /*
@@ -152,21 +153,19 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new QuitCommand(cmd_line,SmallShell::getInstance().getJobs());
     } else if (firstWord == "alias") {
         return new AliasCommand(cmd_line);
+    } else if (firstWord == "unsetenv") {
+        return new UnSetEnvCommand(cmd_line);
     }
 
 
     return nullptr;
 }
 
-// execute commands //
-
-
-
 void SmallShell::executeCommand(const char *cmd_line) {
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-    // Check if the command name (first word) is an alias
+    // Check if the command name is an alias
     if (!aliasMap.empty() && aliasMap.find(firstWord) != aliasMap.end()) {
         // Get the command that the alias maps to
         std::string aliasCommand = aliasMap[firstWord];
@@ -189,7 +188,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
         cmd->execute();
         delete cmd;
     } else {
-        // Not an alias, proceed with original command
+        // Not an alias
         Command* cmd = CreateCommand(cmd_line);
         if (cmd == nullptr) {
             return;
@@ -388,7 +387,7 @@ void ChangeDirCommand::execute() {
         // We can don't check due to the assumption that malloc doesn't fail?
     }
     if(num_of_args > 2){
-        cerr << "smash error: cd: too many arguments" << endl;
+        cout << "smash error: cd: too many arguments" << endl;
     } else if(num_of_args == 1){
     } else {
         string path = args[1];
@@ -455,7 +454,7 @@ void AliasCommand::execute() {
     bool matched = std::regex_search(fullCommand, matches, aliasPattern);
 
     if (!matched) {
-        std::cerr << "smash error: alias: invalid alias format" << std::endl;
+        cout << "smash error: alias: invalid alias format" << std::endl;
         return;
     }
 
@@ -465,13 +464,13 @@ void AliasCommand::execute() {
 
     // Check if alias already exists
     if (SmallShell::getInstance().getAlias(aliasName).compare("") != 0) {
-        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
     // Check if alias name is a reserved command
     if (SmallShell::getInstance().validCommand(aliasName)) {
-        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
@@ -510,6 +509,35 @@ char* SmallShell::getCurrWorkingDir() const {
 
 // Jobs command
 JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
+
+// unsetenv command
+
+UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+
+void UnSetEnvCommand::execute() {
+    if (cmd_segments.size() < 2) {
+        cout << "smash error: unsetenv: not enough arguments" << endl;
+        return;
+    }
+
+    for (size_t i = 1; i < cmd_segments.size();  i++) {
+        // Get the variable name
+        string var_name = cmd_segments[i];
+
+        // Check if the variable exists
+        if (getenv(var_name.c_str()) == nullptr) {
+            cout << "smash error: unsetenv: " << var_name << " does not exist" << std::endl;
+            return;
+        }
+
+        // Remove the environment variable
+        if (unsetenv(var_name.c_str()) != 0) {
+            perror("smash error: unsetenv failed"); //maybe we need to print
+            return;
+        }
+    }
+}
+
 
 void JobsCommand::execute() {
     SmallShell::getInstance().getJobs()->printJobsList();
