@@ -5,6 +5,7 @@ using namespace std;
 #include <vector>
 #include <list>
 #include <unordered_map>
+#include <map>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -12,11 +13,13 @@ using namespace std;
 class Command {
     // TODO: Add your data members
 protected:
+    bool backGround;
     vector<string> cmd_segments;
     const char* cmd_line;
     string alias;
 public:
     explicit Command(const char *cmd_line): cmd_line(cmd_line){};
+    Command(const char *cmd_line, string alias = "");
 
     virtual ~Command() = default;
 
@@ -149,7 +152,10 @@ public:
 class JobsList;
 
 class QuitCommand : public BuiltInCommand {
-    // TODO: Add your data members public:
+    // TODO: Add your data members
+public:
+    JobsList* jobs;
+
     QuitCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~QuitCommand() {
@@ -197,6 +203,8 @@ public:
     JobEntry *getLastJob(int *lastJobId);
 
     JobEntry *getLastStoppedJob(int *jobId);
+
+    void printJobsBeforeQuit();
 
     // TODO: Add extra methods or modify exisitng ones as needed
 };
@@ -279,11 +287,15 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
+    map<string,string> aliasMap;
+    vector<string> sortedAlias;
     string prompt;
     pid_t current_process;
     //string currWorkingDir;
     char* prevWorkingDir;
     static JobsList jobList;
+    JobsList* jobList;
+    vector<string> commands;
     SmallShell();
 
 public:
@@ -312,7 +324,11 @@ public:
     string getPrevWorkingDir() const;
     void setPrevWorkingDir(string newDir);
     JobsList* getJobs();
-
+    void getAllAlias(std::vector<std::string>& aliases);
+    string getAlias(string name);
+    bool validCommand(string name);
+    void createCommandVector();
+    void setAlias(string name, string command);
 };
 
 
