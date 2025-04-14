@@ -187,10 +187,10 @@ void QuitCommand::execute() {
 void AliasCommand::execute() {
     // Just 'alias' without arguments - list all aliases AAAAAAAAAAAAAAAAAAAA
     if (cmd_segments.size() == 1) {
-        std::vector<std::string> aliases;
+        vector<string> aliases;
         SmallShell::getInstance().getAllAlias(aliases);
-        for (const std::string& alias : aliases) {
-            std::cout << alias << std::endl;
+        for (const string& alias : aliases) {
+            cout << alias << std::endl;
         }
         return;
     }
