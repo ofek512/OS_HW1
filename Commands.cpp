@@ -8,6 +8,7 @@
 #include "Commands.h"
 #include <algorithm>
 #include <regex>
+#include <string>
 
 using namespace std;
 
@@ -162,16 +163,40 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
 
 void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add alias support
-    Command* cmd = CreateCommand(cmd_line);
-    //if cmd is nullptr, it means that the command is not recognized
-    if(cmd == nullptr) {
-        return;
+    std::string cmd_s = _trim(std::string(cmd_line));
+    std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
+    // Check if the command name (first word) is an alias
+    if (!aliasMap.empty() && aliasMap.find(firstWord) != aliasMap.end()) {
+        // Get the command that the alias maps to
+        std::string aliasCommand = aliasMap[firstWord];
+
+        // Get any arguments that followed the alias
+        std::string args = "";
+        size_t spacePos = cmd_s.find_first_of(" \n");
+        if (spacePos != std::string::npos) {
+            args = cmd_s.substr(spacePos);
+        }
+
+        // Create the new command by substituting the alias
+        std::string newCmd = aliasCommand + args;
+
+        // Execute the substituted command
+        Command* cmd = CreateCommand(newCmd.c_str());
+        if (cmd == nullptr) {
+            return;
+        }
+        cmd->execute();
+        delete cmd;
+    } else {
+        // Not an alias, proceed with original command
+        Command* cmd = CreateCommand(cmd_line);
+        if (cmd == nullptr) {
+            return;
+        }
+        cmd->execute();
+        delete cmd;
     }
-    cmd->execute();
-    //delete cmd for memory leak prevention
-    delete cmd;
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
 
