@@ -384,7 +384,7 @@ void ChangeDirCommand::execute() {
 AliasCommand::AliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void AliasCommand::execute() {
-    // Just 'alias' without arguments - list all aliases AAAAAAAAAAAAAAAAAAAA
+    // Just 'alias' without arguments - list all aliases
     if (cmd_segments.size() == 1) {
         vector<string> aliases;
         SmallShell::getInstance().getAllAlias(aliases);
@@ -394,24 +394,25 @@ void AliasCommand::execute() {
         return;
     }
 
-    // Construct the full command string
-    std::string fullCommand;
-    for (size_t i = 0; i < cmd_segments.size(); i++) {
-        fullCommand += cmd_segments[i];
-        if (i < cmd_segments.size() - 1) {
-            fullCommand += " ";
-        }
-    }
+    // DEBUG: Print the original command line
+    // std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
 
+    // Use the original command line directly
+    std::string fullCommand = cmd_line;
     if (this->backGround) {
         removeBackgroundSignFromString(fullCommand);
     }
 
-    // Validate format with regex
-    static const std::regex aliasPattern("^alias ([a-zA-Z0-9_]+)='([^']*)'$");
-    std::smatch matches;
+    // Trim the command to ensure no leading/trailing whitespace
+    fullCommand = _trim(fullCommand);
 
-    if (!std::regex_search(fullCommand, matches, aliasPattern)) {
+    // Keep the ^ anchor but make the pattern more flexible for internal spacing
+    static const std::regex aliasPattern("^alias\\s+([a-zA-Z0-9_]+)\\s*=\\s*'([^']*)'$");
+
+    std::smatch matches;
+    bool matched = std::regex_search(fullCommand, matches, aliasPattern);
+
+    if (!matched) {
         std::cerr << "smash error: alias: invalid alias format" << std::endl;
         return;
     }
@@ -426,7 +427,7 @@ void AliasCommand::execute() {
         return;
     }
 
-    // Check if alias name is a reserved command, TODO check if correct
+    // Check if alias name is a reserved command
     if (SmallShell::getInstance().validCommand(aliasName)) {
         std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
