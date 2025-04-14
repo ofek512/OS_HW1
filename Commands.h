@@ -16,10 +16,8 @@ protected:
     bool backGround;
     vector<string> cmd_segments;
     const char* cmd_line;
-    string alias;
 public:
     explicit Command(const char *cmd_line): cmd_line(cmd_line){};
-    Command(const char *cmd_line, string alias = "");
 
     virtual ~Command() = default;
 
@@ -212,9 +210,9 @@ public:
 //jobs - ofek
 
 class JobsCommand : public BuiltInCommand {
-    JobsList* jobs;
+    //JobsList* jobs;
 public:
-    JobsCommand(const char *cmd_line, JobsList *jobs);
+    JobsCommand(const char *cmd_line);
 
     virtual ~JobsCommand() {
     }
@@ -293,7 +291,7 @@ private:
     pid_t current_process;
     //string currWorkingDir;
     char* prevWorkingDir;
-    static JobsList jobList;
+    //static JobsList jobList;
     JobsList* jobList;
     vector<string> commands;
     SmallShell();
@@ -319,7 +317,7 @@ public:
     // TODO: add extra methods as needed
     void setPrompt(string newPrompt);
     string getPrompt() const;
-    string getCurrWorkingDir() const;
+    char* getCurrWorkingDir() const;
     void setCurrWorkingDir(string newDir);
     string getPrevWorkingDir() const;
     void setPrevWorkingDir(string newDir);
