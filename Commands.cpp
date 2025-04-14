@@ -303,7 +303,21 @@ void SmallShell::setAlias(string name, string command) {
 
 /////////////////////////////--------------Built-in commands-------//////////////////////////////
 
+void createSegments(const char* cmd_line, vector<string>& segments)
+{
+    std::string temp=cmd_line;
+    std::string toAdd;
+    stringstream stringLine(temp);
+    while (getline(stringLine, toAdd, ' ')) {
+        if(!toAdd.empty())
+        {
+            segments.push_back(toAdd);
+        }
+    }
+}
+
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
+    createSegments(cmd_line, cmd_segments);
     //TODO: need to add check for whether command is background
 }
 
@@ -385,6 +399,9 @@ AliasCommand::AliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void AliasCommand::execute() {
     // Just 'alias' without arguments - list all aliases
+//    int size = cmd_segments.size();
+//    std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
+//    printf("%d",size);
     if (cmd_segments.size() == 1) {
         vector<string> aliases;
         SmallShell::getInstance().getAllAlias(aliases);
