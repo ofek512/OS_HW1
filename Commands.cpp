@@ -169,6 +169,8 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new QuitCommand(cmd_line,SmallShell::getInstance().getJobs());
     } else if (firstWord == "alias") {
         return new AliasCommand(cmd_line);
+    } else if(firstWord == "fg") {
+        return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobs()); // TODO: remove jobs
     }
 
 
