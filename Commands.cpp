@@ -97,6 +97,12 @@ char** init_args(){
     return args;
 }
 
+bool is_legit_num(const string& s){
+    auto it = s.begin();
+    for(; it != s.end() && std::isdigit(*it); it++){}
+    return it == s.end();
+} // Should I add more checks like 123 - 321, --321, empty string?
+
 // TODO: Add your implementation for classes in Commands.h
 
 
@@ -551,8 +557,10 @@ void ForegroundCommand::execute() {
     int num_of_args = _parseCommandLine(this->cmd_line, args);
     if(num_of_args > 2){
         cerr << "Smash error: fg: invalid arguments" << endl;
+        free_args(args, num_of_args);
         return;
     } else if(num_of_args == 1){
+        // Check whether jobList is empty
         if(smash.getJobs()->max_id == -1){
             cerr << "smash error: fg: jobs list is empty" << endl;
             free_args(args, num_of_args);
@@ -561,7 +569,7 @@ void ForegroundCommand::execute() {
         JobsList::JobEntry* max_id_job = smash.getJobs()->job_map[smash.getJobs()->max_id];
         if(max_id_job->isStopped){
             if(kill(max_id_job->pid, SIGCONT) == -1){
-                perror("smash error: kill failed");
+                perror("smash error: kill failed"); // Unable to invoke process
                 free_args(args, num_of_args);
                 return;
             }
@@ -572,11 +580,44 @@ void ForegroundCommand::execute() {
 
         int status;
         if(waitpid(max_id_job->pid, &status, 0) == -1){
-            perror("smash errorL waitpid failed");
+            perror("smash error: waitpid failed");
             free_args(args, num_of_args);
             return;
         }
     } else {
-        //TODO: finish
+        // Check whether arguments is a number
+        if(!is_legit_num(args[1])){
+            cerr << "smash error: fg: invalid arguments" << endl;
+            free_args(args, num_of_args);
+            return;
+        }
+        int job_id = stoi(args[1]);
+        JobsList::JobEntry* job_to_fg = smash.getJobs()->getJobById(job_id);
+        // Check whether find succeed
+        if(!job_to_fg){
+            cerr << "smash error: fg: job-id " << job_id << " does not exist" << endl;
+            free_args(args, num_of_args);
+            return;
+        }
+        int job_pid = job_to_fg->pid;
+        if(job_to_fg->isStopped) {
+            // Trying to invoke process if it stopepd
+            if (kill(job_pid, SIGCONT) == -1) {
+                perror("smash error: kill failed");
+                free_args(args, num_of_args);
+                return;
+            }
+        }
+        cout << job_to_fg->command << " " << job_pid << endl;
+        smash.current_process = job_pid;
+        smash.getJobs()->removeJobById(job_id);
+        // Check whether waitpid succeed
+        int status;
+        if(waitpid(job_pid, &status, 0) == -1){
+            perror("smash error: waitpid failed");
+            free_args(args, num_of_args);
+            return;
+        }
     }
+    free_args(args, num_of_args);
 }
