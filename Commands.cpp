@@ -8,6 +8,7 @@
 #include "Commands.h"
 #include <algorithm>
 #include <regex>
+#include <string>
 
 using namespace std;
 
@@ -171,27 +172,49 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new AliasCommand(cmd_line);
     } else if(firstWord == "fg") {
         return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobs()); // TODO: remove jobs
+    } else if (firstWord == "unsetenv") {
+        return new UnSetEnvCommand(cmd_line);
     }
-
+//meow
 
     return nullptr;
 }
 
-// execute commands //
-
-
-
 void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add alias support
-    Command* cmd = CreateCommand(cmd_line);
-    //if cmd is nullptr, it means that the command is not recognized
-    if(cmd == nullptr) {
-        return;
+    std::string cmd_s = _trim(std::string(cmd_line));
+    std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
+    // Check if the command name is an alias
+    if (!aliasMap.empty() && aliasMap.find(firstWord) != aliasMap.end()) {
+        // Get the command that the alias maps to
+        std::string aliasCommand = aliasMap[firstWord];
+
+        // Get any arguments that followed the alias
+        std::string args = "";
+        size_t spacePos = cmd_s.find_first_of(" \n");
+        if (spacePos != std::string::npos) {
+            args = cmd_s.substr(spacePos);
+        }
+
+        // Create the new command by substituting the alias
+        std::string newCmd = aliasCommand + args;
+
+        // Execute the substituted command
+        Command* cmd = CreateCommand(newCmd.c_str());
+        if (cmd == nullptr) {
+            return;
+        }
+        cmd->execute();
+        delete cmd;
+    } else {
+        // Not an alias
+        Command* cmd = CreateCommand(cmd_line);
+        if (cmd == nullptr) {
+            return;
+        }
+        cmd->execute();
+        delete cmd;
     }
-    cmd->execute();
-    //delete cmd for memory leak prevention
-    delete cmd;
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
 
@@ -376,7 +399,21 @@ void SmallShell::setAlias(string name, string command) {
 
 /////////////////////////////--------------Built-in commands-------//////////////////////////////
 
+void createSegments(const char* cmd_line, vector<string>& segments)
+{
+    std::string temp=cmd_line;
+    std::string toAdd;
+    stringstream stringLine(temp);
+    while (getline(stringLine, toAdd, ' ')) {
+        if(!toAdd.empty())
+        {
+            segments.push_back(toAdd);
+        }
+    }
+}
+
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
+    createSegments(cmd_line, cmd_segments);
     //TODO: need to add check for whether command is background
 }
 
@@ -421,7 +458,7 @@ void ChangeDirCommand::execute() {
         // We can don't check due to the assumption that malloc doesn't fail?
     }
     if(num_of_args > 2){
-        cerr << "smash error: cd: too many arguments" << endl;
+        cout << "smash error: cd: too many arguments" << endl;
     } else if(num_of_args == 1){
     } else {
         string path = args[1];
@@ -456,7 +493,10 @@ void ChangeDirCommand::execute() {
 AliasCommand::AliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void AliasCommand::execute() {
-    // Just 'alias' without arguments - list all aliases AAAAAAAAAAAAAAAAAAAA
+    // Just 'alias' without arguments - list all aliases
+//    int size = cmd_segments.size();
+//    std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
+//    printf("%d",size);
     if (cmd_segments.size() == 1) {
         vector<string> aliases;
         SmallShell::getInstance().getAllAlias(aliases);
@@ -466,25 +506,26 @@ void AliasCommand::execute() {
         return;
     }
 
-    // Construct the full command string
-    std::string fullCommand;
-    for (size_t i = 0; i < cmd_segments.size(); i++) {
-        fullCommand += cmd_segments[i];
-        if (i < cmd_segments.size() - 1) {
-            fullCommand += " ";
-        }
-    }
+    // DEBUG: Print the original command line
+    // std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
 
+    // Use the original command line directly
+    std::string fullCommand = cmd_line;
     if (this->backGround) {
         removeBackgroundSignFromString(fullCommand);
     }
 
-    // Validate format with regex
-    static const std::regex aliasPattern("^alias+([a-zA-Z0-9_]+)='(.*)'$");
-    std::smatch matches;
+    // Trim the command to ensure no leading/trailing whitespace
+    fullCommand = _trim(fullCommand);
 
-    if (!std::regex_search(fullCommand, matches, aliasPattern)) {
-        std::cerr << "smash error: alias: invalid alias format" << std::endl;
+    // Keep the ^ anchor but make the pattern more flexible for internal spacing
+    static const std::regex aliasPattern("^alias\\s+([a-zA-Z0-9_]+)\\s*=\\s*'([^']*)'$");
+
+    std::smatch matches;
+    bool matched = std::regex_search(fullCommand, matches, aliasPattern);
+
+    if (!matched) {
+        cout << "smash error: alias: invalid alias format" << std::endl;
         return;
     }
 
@@ -494,13 +535,13 @@ void AliasCommand::execute() {
 
     // Check if alias already exists
     if (SmallShell::getInstance().getAlias(aliasName).compare("") != 0) {
-        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
-    // Check if alias name is a reserved command, TODO check if correct
+    // Check if alias name is a reserved command
     if (SmallShell::getInstance().validCommand(aliasName)) {
-        std::cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
@@ -539,6 +580,35 @@ char* SmallShell::getCurrWorkingDir() const {
 
 // Jobs command
 JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
+
+// unsetenv command
+
+UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+
+void UnSetEnvCommand::execute() {
+    if (cmd_segments.size() < 2) {
+        cout << "smash error: unsetenv: not enough arguments" << endl;
+        return;
+    }
+
+    for (size_t i = 1; i < cmd_segments.size();  i++) {
+        // Get the variable name
+        string var_name = cmd_segments[i];
+
+        // Check if the variable exists
+        if (getenv(var_name.c_str()) == nullptr) {
+            cout << "smash error: unsetenv: " << var_name << " does not exist" << std::endl;
+            return;
+        }
+
+        // Remove the environment variable
+        if (unsetenv(var_name.c_str()) != 0) {
+            perror("smash error: unsetenv failed"); //maybe we need to print
+            return;
+        }
+    }
+}
+
 
 void JobsCommand::execute() {
     SmallShell::getInstance().getJobs()->printJobsList();
