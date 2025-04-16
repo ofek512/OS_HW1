@@ -462,7 +462,7 @@ void ChangeDirCommand::execute() {
     } else if(num_of_args == 1){
     } else {
         string path = args[1];
-        char* current_path = getcwd(NULL, 0); //check whether it's working
+        char* current_path = getcwd(NULL, 0);
 
         if(path == "-"){
             if(!(*plastPwd)){
@@ -582,7 +582,6 @@ char* SmallShell::getCurrWorkingDir() const {
 JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
 
 // unsetenv command
-
 UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
 
 void UnSetEnvCommand::execute() {
@@ -692,4 +691,11 @@ void ForegroundCommand::execute() {
         }
     }
     free_args(args, num_of_args);
+}
+
+// Watchproc command
+WatchProcCommand::WatchProcCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void WatchProcCommand::execute() {
+
 }
