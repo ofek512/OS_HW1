@@ -138,7 +138,7 @@ public:
 class ChpromptCommand : public BuiltInCommand {
 public:
     string newSmashPrompt;
-    ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
+    ChpromptCommand(const char* cmd_line);
     virtual ~ChpromptCommand() {}
     void execute() override;
 }; // DONE

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <regex>
 #include <string>
+#include <unistd.h>
 
 using namespace std;
 
@@ -106,6 +107,9 @@ bool is_legit_num(const string& s){
 
 // TODO: Add your implementation for classes in Commands.h
 
+string SmallShell::getPrompt() const {
+    return prompt;
+}
 
 //JobsList SmallShell::jobList;
 
@@ -175,7 +179,10 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     } else if (firstWord == "unsetenv") {
         return new UnSetEnvCommand(cmd_line);
     }
-//meow
+
+    //if nothing else is matched, we treat as external command.
+    return new ExternalCommand(cmd_line);
+    //meow
 
     return nullptr;
 }
@@ -417,6 +424,8 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
     //TODO: need to add check for whether command is background
 }
 
+ChpromptCommand::ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line), newSmashPrompt("smash") {}
+
 void ChpromptCommand::execute()
 {
     if(cmd_segments.size()>1)//there was a new prompt
@@ -427,7 +436,7 @@ void ChpromptCommand::execute()
         if(prompt.empty()) {
             newSmashPrompt="smash";
         }
-            //if prompt is not empty, set new prompt
+        //if prompt is not empty, set new prompt
         else {
             newSmashPrompt=prompt;
         }
@@ -437,6 +446,9 @@ void ChpromptCommand::execute()
         newSmashPrompt="smash";
     }
     SmallShell::getInstance().setPrompt(newSmashPrompt);
+
+    // Add this line for debugging
+    std::cout << "Prompt changed to: " << newSmashPrompt << std::endl;
 }
 
 /* ShowPid command */
@@ -699,3 +711,99 @@ WatchProcCommand::WatchProcCommand(const char *cmd_line): BuiltInCommand(cmd_lin
 void WatchProcCommand::execute() {
 
 }
+//External commands
+ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {
+    // Store the original command line
+    backGround = _isBackgroundComamnd(cmd_line);
+
+    // Create a clean version of the command for segments
+    std::string clean_cmd_line = cmd_line;
+    if (backGround) {
+        // Create a modifiable copy of the command line
+        char* cmd_copy = strdup(cmd_line);
+        if (cmd_copy) {
+            // Remove the & sign
+            _removeBackgroundSign(cmd_copy);
+            // Store the clean command segments
+            createSegments(cmd_copy, cmd_segments);
+            free(cmd_copy);
+        }
+    } else {
+        // If not a background command, just use as is
+        createSegments(cmd_line, cmd_segments);
+    }
+}
+
+void ExternalCommand::execute() {
+    if (cmd_segments.empty()) {
+        return;  // Nothing to execute
+    }
+
+    // Create a clean version of the command line for execution
+    char* cmd_copy = strdup(cmd_line);
+    if (!cmd_copy) {
+        perror("smash error: memory allocation failed");
+        return;
+    }
+
+    // If it's a background command, remove the & sign
+    if (backGround) {
+        _removeBackgroundSign(cmd_copy);
+    }
+
+    // Parse the cleaned command
+    char** args = init_args();
+    if (!args) {
+        perror("smash error: memory allocation failed");
+        free(cmd_copy);
+        return;
+    }
+
+    int num_args = _parseCommandLine(cmd_copy, args);
+    free(cmd_copy);  // Done with the copy
+
+    if (num_args == 0) {
+        free_args(args, num_args);
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        // Fork failed
+        perror("smash error: fork failed");
+        free_args(args, num_args);
+        return;
+    }
+
+    if (pid == 0) {
+        // Child process
+        setpgrp(); // Set process group ID to dissociate from shell
+
+        // Execute the command using execvp which searches in PATH
+        execvp(args[0], args);
+
+        // If execvp failed, report error and exit
+        perror("smash error: execvp failed");
+        free_args(args, num_args);
+        exit(1);
+    } else {
+        // Parent process
+        SmallShell& smash = SmallShell::getInstance();
+
+        if (!backGround) {
+            // Wait for child process to complete if not a background command
+            smash.current_process = pid;
+            int status;
+            if (waitpid(pid, &status, WUNTRACED) == -1) {
+                perror("smash error: waitpid failed");
+            }
+            smash.current_process = -1;
+        } else {
+            // Add job to jobs list if it's a background command
+            smash.getJobs()->addJob(this, pid, false);
+        }
+
+        free_args(args, num_args);
+    }
+}
+
