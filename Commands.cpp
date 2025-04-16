@@ -107,6 +107,9 @@ bool is_legit_num(const string& s){
 
 // TODO: Add your implementation for classes in Commands.h
 
+string SmallShell::getPrompt() const {
+    return prompt;
+}
 
 //JobsList SmallShell::jobList;
 
@@ -421,6 +424,8 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
     //TODO: need to add check for whether command is background
 }
 
+ChpromptCommand::ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line), newSmashPrompt("smash") {}
+
 void ChpromptCommand::execute()
 {
     if(cmd_segments.size()>1)//there was a new prompt
@@ -431,7 +436,7 @@ void ChpromptCommand::execute()
         if(prompt.empty()) {
             newSmashPrompt="smash";
         }
-            //if prompt is not empty, set new prompt
+        //if prompt is not empty, set new prompt
         else {
             newSmashPrompt=prompt;
         }
@@ -441,6 +446,9 @@ void ChpromptCommand::execute()
         newSmashPrompt="smash";
     }
     SmallShell::getInstance().setPrompt(newSmashPrompt);
+
+    // Add this line for debugging
+    std::cout << "Prompt changed to: " << newSmashPrompt << std::endl;
 }
 
 /* ShowPid command */
