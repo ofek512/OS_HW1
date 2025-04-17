@@ -106,7 +106,7 @@ bool is_legit_num(const string& s){
     auto it = s.begin();
     for(; it != s.end() && std::isdigit(*it); it++){}
     return it == s.end();
-} // Should I add more checks like 123 - 321, --321, empty string?
+}
 
 bool extract_signal_number(char* input, int& signum){
     if(!input || strlen(input) < 2 || input[0] != '-'){
@@ -130,9 +130,6 @@ string SmallShell::getPrompt() const {
 
 //JobsList SmallShell::jobList;
 
-/*SmallShell::SmallShell(): prompt("smash"), pid(getpid()),
-                          current_process(-1),
-                          prevWorkingDir(nullptr){}*/
 SmallShell::SmallShell() : aliasMap(), sortedAlias(), prompt("smash"),current_process(-1), prevWorkingDir(nullptr),
                            jobList(new JobsList()), commands(), pid(getpid()) {
     createCommandVector();
@@ -157,23 +154,7 @@ SmallShell::~SmallShell() {
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
 Command *SmallShell::CreateCommand(const char *cmd_line) {
-    // For example:
-  /*
-  string cmd_s = _trim(string(cmd_line));
-  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-  if (firstWord.compare("pwd") == 0) {
-    return new GetCurrDirCommand(cmd_line);
-  }
-  else if (firstWord.compare("showpid") == 0) {
-    return new ShowPidCommand(cmd_line);
-  }
-  else if ...
-  .....
-  else {
-    return new ExternalCommand(cmd_line);
-  }
-  */
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
@@ -200,7 +181,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     } else if (firstWord == "alias") {
         return new AliasCommand(cmd_line);
     } else if(firstWord == "fg") {
-        return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobs()); // TODO: remove jobs
+        return new ForegroundCommand(cmd_line); // TODO: remove jobs
     } else if (firstWord == "unsetenv") {
         return new UnSetEnvCommand(cmd_line);
     } else if (firstWord == "watchproc") {
@@ -254,8 +235,6 @@ void SmallShell::executeCommand(const char *cmd_line) {
         delete cmd;
     }
 }
-
-
 
 void SmallShell::setPrompt(string newPrompt)
 {
@@ -313,7 +292,7 @@ bool isFinished(JobsList::JobEntry* job)
             return false; // Safer to assume it's still running TODO check
         }
     }
-} //check for correctness
+}
 
 void JobsList::removeFinishedJobs() {
     jobsList.remove_if(isFinished);
@@ -364,7 +343,7 @@ void JobsList::removeJobById(int jobId) {
             break;
         }
     }
-} // Need to check for correctness
+}
 
 void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
     removeFinishedJobs();
@@ -704,7 +683,7 @@ void JobsCommand::execute() {
 }
 
 // ForeGround command
-ForegroundCommand::ForegroundCommand(const char *cmd_line, JobsList *jobs): BuiltInCommand(cmd_line) {}
+ForegroundCommand::ForegroundCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void ForegroundCommand::execute() {
     char** args = init_args();
@@ -811,6 +790,7 @@ void WatchProcCommand::execute() {
         free_args(args, num_of_args);
         return;
     }
+
     int memory_usage = 0;
     string line;
     while(getline(memory_file, line)){
@@ -837,6 +817,7 @@ void WatchProcCommand::execute() {
             break;
         }
     }
+
     long ticks_per_sec = sysconf(_SC_CLK_TCK);
     cout << "PID: " << pid << " | CPU Usage: " << std::setprecision(2) << (utime + stime) / (double)ticks_per_sec
          << "% | Memory Usage: " << std::setprecision(2) << (double)memory_usage / 1024 << " MB" << endl;
@@ -910,6 +891,7 @@ void KillCommand::execute() {
 
 
 /////////////////////////////--------------External commands-------//////////////////////////////
+
 ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {
     // Store the original command line
     backGround = _isBackgroundComamnd(cmd_line);
@@ -1006,6 +988,7 @@ void ExternalCommand::execute() {
 }
 
 /////////////////////////////--------------Special commands-------//////////////////////////////
+
 // Redirection command
 RedirectionCommand::RedirectionCommand(const char *cmd_line, command_type type):
                                        Command(cmd_line), type(type) {

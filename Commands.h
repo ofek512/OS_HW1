@@ -212,7 +212,7 @@ public:
 class ForegroundCommand : public BuiltInCommand {
     // TODO: Add your data members
 public:
-    ForegroundCommand(const char *cmd_line, JobsList *jobs);
+    ForegroundCommand(const char *cmd_line);
 
     virtual ~ForegroundCommand() {
     }
@@ -279,7 +279,7 @@ public:
     virtual ~RedirectionCommand();
 
     void execute() override;
-};
+}; // DONE
 
 class PipeCommand : public Command {
     // TODO: Add your data members
