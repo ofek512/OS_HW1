@@ -263,12 +263,20 @@ public:
 /////////////////////////////--------------Special commands-------//////////////////////////////
 
 class RedirectionCommand : public Command {
-    // TODO: Add your data members
+    char* command;
+    char* file_name;
+    int stdout_copy;
 public:
-    explicit RedirectionCommand(const char *cmd_line);
+    enum command_type {
+        TRUNCATE = 1,
+        CONCAT = 2
+    };
 
-    virtual ~RedirectionCommand() {
-    }
+    command_type type;
+
+    explicit RedirectionCommand(const char *cmd_line, command_type type);
+
+    virtual ~RedirectionCommand();
 
     void execute() override;
 };

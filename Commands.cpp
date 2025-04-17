@@ -11,6 +11,8 @@
 #include <string>
 #include <unistd.h>
 #include <fstream>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -174,6 +176,14 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
   */
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+
+    // Redirection command
+    if(strstr(cmd_line, ">>")) {
+        return new RedirectionCommand(cmd_line,RedirectionCommand::CONCAT);
+    } else if(strstr(cmd_line, ">")) {
+        return new RedirectionCommand(cmd_line, RedirectionCommand::TRUNCATE);
+    }
+
     // TODO: change to factory
     if (firstWord == "chprompt") {
         return new ChpromptCommand(cmd_line);
@@ -995,3 +1005,87 @@ void ExternalCommand::execute() {
     }
 }
 
+/////////////////////////////--------------Special commands-------//////////////////////////////
+// Redirection command
+RedirectionCommand::RedirectionCommand(const char *cmd_line, command_type type):
+                                       Command(cmd_line), type(type) {
+    string cmd;
+    string file;
+    size_t index = 0;
+    string input(cmd_line);
+    if(type == CONCAT){
+        index = input.find(">>");
+    } else {
+        index = input.find('>');
+    }
+
+    // Parse command
+    cmd = _trim(input.substr(0, index));
+    command = (char*) malloc(sizeof(char) * (cmd.length() + 1));
+
+    // Check whether malloc succeed
+    if(!command){
+        perror("smash error: malloc failed");
+        throw bad_alloc();
+    }
+
+    strcpy(command, cmd.c_str());
+    if(_isBackgroundComamnd(command)) {
+        _removeBackgroundSign(command);
+    }
+
+    // Parse path
+    file = _trim(input.substr(index + type));
+    file_name = (char*) malloc(sizeof(char) * (file.length() + 1));
+
+    // Check whether malloc succeed
+    if(!file_name){
+        free(command);
+        perror("smash error: malloc failed");
+        throw bad_alloc();
+    }
+
+    strcpy(file_name, file.c_str());
+
+}
+
+RedirectionCommand::~RedirectionCommand() {
+    free(command);
+    free(file_name);
+}
+
+void RedirectionCommand::execute() {
+
+    int fd = 0;
+    stdout_copy = dup(1);
+
+    // Trying to open the file
+    if(type == CONCAT) {
+        fd = open(file_name, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    } else {
+        fd = open(file_name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+
+    // Check whether open succeed
+    if(fd < 0) {
+        perror("smash error: open failed");
+        close(stdout_copy);
+        return;
+    }
+
+    // Check whether redirection succeed
+    if (dup2(fd, 1) == -1) {
+        perror("smash error: dup2 failed");
+        close(fd);
+        close(stdout_copy);
+        return;
+    }
+
+    // Command execution
+    SmallShell::getInstance().executeCommand(command);
+
+    // Restore redirection to stdout
+    dup2(stdout_copy, 1);
+    close(fd);
+    close(stdout_copy);
+}
