@@ -819,7 +819,7 @@ void WatchProcCommand::execute() {
     }
 
     long ticks_per_sec = sysconf(_SC_CLK_TCK);
-    cout << "PID: " << pid << " | CPU Usage: " << std::setprecision(2) << (utime + stime) / (double)ticks_per_sec
+    cout << "PID: " << pid << " | CPU Usage: "<< std::setprecision(2) << (utime + stime) / (double)ticks_per_sec
          << "% | Memory Usage: " << std::setprecision(2) << (double)memory_usage / 1024 << " MB" << endl;
     free_args(args, num_of_args);
 } // Need to check calculation of CPU time
