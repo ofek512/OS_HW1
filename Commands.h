@@ -30,6 +30,7 @@ public:
     // TODO: Add your extra methods if needed
     /*string getPath();
     void setPath(string path);*/
+    string getCommandS();
     string printCommand();
     bool hasAlias();
     void setAlias(string command);

@@ -124,6 +124,11 @@ bool extract_signal_number(char* input, int& signum){
     return true;
 }
 
+string Command::getCommandS() {
+    return cmd_line;
+}
+
+
 string SmallShell::getPrompt() const {
     return prompt;
 }
@@ -259,7 +264,7 @@ JobsList::JobsList(): jobsList(), job_map(), max_id(-1){}
 void JobsList::printJobsList() {
     removeFinishedJobs();
     for(JobsList::JobEntry* job : jobsList) {
-        cout << "[" <<job->jobId << "] " <<job->command << " : " <<job->pid << endl; //print jobs, need to check if theyre sorted
+        cout << "[" <<job->jobId << "] " <<job->command << endl; //TODO initialise job->command to have the name
     }
 }
 
@@ -354,7 +359,7 @@ void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
         cerr << "addJob error: reached limit of processes" << endl;
         return;
     }
-    JobEntry* job_to_insert = new JobEntry(cmd, isStopped, it, pid, "");//im not sure how to convert it to string correcrtly
+    JobEntry* job_to_insert = new JobEntry(cmd, isStopped, it, pid, cmd->getCommandS());//im not sure how to convert it to string correcrtly
     job_map[it] = job_to_insert;
     jobsList.push_back(job_to_insert);
 
