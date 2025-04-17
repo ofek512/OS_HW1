@@ -123,6 +123,7 @@ public:
     bool validCommand(string name);
     void createCommandVector();
     void setAlias(string name, string command);
+    bool removeAlias(string name);
 };
 
 /////////////////////////////--------------Built-in commands-------//////////////////////////////
@@ -133,7 +134,7 @@ public:
 
     virtual ~BuiltInCommand() {
     }
-};
+}; // TODO: Maybe remove '&' in constructor?
 
 class ChpromptCommand : public BuiltInCommand {
 public:
@@ -200,13 +201,13 @@ public:
 class KillCommand : public BuiltInCommand {
     // TODO: Add your data members
 public:
-    KillCommand(const char *cmd_line, JobsList *jobs);
+    KillCommand(const char *cmd_line);
 
     virtual ~KillCommand() {
     }
 
     void execute() override;
-};
+}; // DONE
 
 class ForegroundCommand : public BuiltInCommand {
     // TODO: Add your data members
@@ -237,7 +238,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 class UnSetEnvCommand : public BuiltInCommand {
 public:
@@ -247,7 +248,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 class WatchProcCommand : public BuiltInCommand {
 public:
@@ -257,7 +258,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 /////////////////////////////--------------Special commands-------//////////////////////////////
 
@@ -322,7 +323,7 @@ public:
     }
 
     void execute() override;
-};
+}; // DONE
 
 void removeBackgroundSignFromString(std::string& cmd_line);
 

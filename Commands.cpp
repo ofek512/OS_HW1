@@ -10,6 +10,7 @@
 #include <regex>
 #include <string>
 #include <unistd.h>
+#include <fstream>
 
 using namespace std;
 
@@ -105,7 +106,21 @@ bool is_legit_num(const string& s){
     return it == s.end();
 } // Should I add more checks like 123 - 321, --321, empty string?
 
-// TODO: Add your implementation for classes in Commands.h
+bool extract_signal_number(char* input, int& signum){
+    if(!input || strlen(input) < 2 || input[0] != '-'){
+        return false;
+    }
+    string temp = (string(input)).erase(0, 1);
+
+    if(!is_legit_num(temp)){
+        return false;
+    }
+    signum = stoi(temp);
+
+    if(signum > 31) return false;
+
+    return true;
+}
 
 string SmallShell::getPrompt() const {
     return prompt;
@@ -178,6 +193,12 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobs()); // TODO: remove jobs
     } else if (firstWord == "unsetenv") {
         return new UnSetEnvCommand(cmd_line);
+    } else if (firstWord == "watchproc") {
+        return new WatchProcCommand(cmd_line);
+    } else if (firstWord == "kill") {
+        return new KillCommand(cmd_line);
+    } else if(firstWord == "unalias") {
+        return new UnAliasCommand(cmd_line);
     }
 
     //if nothing else is matched, we treat as external command.
@@ -404,6 +425,20 @@ void SmallShell::setAlias(string name, string command) {
     sortedAlias.push_back(name);
 }
 
+bool SmallShell::removeAlias(string name){
+
+    // Check whether alias exist
+    if(SmallShell::getInstance().getAlias(name) == ""){
+        return false;
+    }
+
+    // Erase from map and vector
+    aliasMap.erase(name);
+    sortedAlias.erase(find(sortedAlias.begin(), sortedAlias.end(), name));
+
+    return true;
+}
+
 /////////////////////////////--------------Built-in commands-------//////////////////////////////
 
 void createSegments(const char* cmd_line, vector<string>& segments)
@@ -561,6 +596,39 @@ void AliasCommand::execute() {
     SmallShell::getInstance().setAlias(aliasName, aliasCommand);
 }
 
+// Unalias command
+UnAliasCommand::UnAliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void UnAliasCommand::execute() {
+    char** args = init_args();
+    int num_of_args = _parseCommandLine(this->cmd_line, args);
+
+    // Check whether malloc succeed
+    if(!args){
+        cout << "smash error: malloc failed" << endl;
+        return;
+    }
+
+    // Check validity of arguments
+    if(num_of_args == 1) {
+        cout << "smash error: unalias: not enough arguments" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+
+    for(int i = 1; i < num_of_args; i++){
+        string current_alias(args[i]);
+
+        // Check whether alias exist
+        if(!SmallShell::getInstance().removeAlias(current_alias)){
+            cout << "smash error: unalias: " << current_alias << " alias does not exist" << endl;
+            free_args(args, num_of_args);
+            return;
+        }
+    }
+    free_args(args, num_of_args);
+}
+
 // Quit command
 QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs):BuiltInCommand(cmd_line),jobs(jobs){}
 
@@ -620,7 +688,7 @@ void UnSetEnvCommand::execute() {
     }
 }
 
-
+// Jobs command
 void JobsCommand::execute() {
     SmallShell::getInstance().getJobs()->printJobsList();
 }
@@ -709,9 +777,129 @@ void ForegroundCommand::execute() {
 WatchProcCommand::WatchProcCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void WatchProcCommand::execute() {
+    char** args = init_args();
+    int num_of_args = _parseCommandLine(this->cmd_line, args);
+    // Check whether malloc succeed
+    if(!args){
+        cerr << "smash failed: memory allocation error" << endl;
+        return;
+    }
 
+    // Check correctness of input
+    if(num_of_args > 2 || num_of_args == 1 || !is_legit_num(args[1])){
+        perror("smash error: watchproc: invalid arguments");
+        free_args(args, num_of_args);
+        return;
+    }
+
+    int pid = stoi(args[1]);
+    ifstream memory_file("/proc/" + to_string(pid) + "/status");
+
+    // Check whether pid exists
+    if(!memory_file.is_open()){
+        cout << "smash error: watchproc: pid " << pid << " does not exist" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+    int memory_usage = 0;
+    string line;
+    while(getline(memory_file, line)){
+        if(line.find("VmRSS") == 0){
+            istringstream iss(line);
+            string temp;
+            iss >> temp >> memory_usage;
+        }
+    }
+    memory_file.close();
+
+    // CPU file
+    ifstream cpu_file("/proc/" + to_string(pid) + "/stat");
+    long utime = 0, stime = 0;
+    int field = 0;
+
+    // Retrieve CPU stats
+    while(cpu_file >> line){
+        field++;
+        if(field == 14) {
+            utime = stol(line);
+        } else if (field == 15){
+            stime = stol(line);
+            break;
+        }
+    }
+    long ticks_per_sec = sysconf(_SC_CLK_TCK);
+    cout << "PID: " << pid << " | CPU Usage: " << std::setprecision(2) << (utime + stime) / (double)ticks_per_sec
+         << "% | Memory Usage: " << std::setprecision(2) << (double)memory_usage / 1024 << " MB" << endl;
+    free_args(args, num_of_args);
+} // Need to check calculation of CPU time
+
+// Kill command
+KillCommand::KillCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void KillCommand::execute() {
+    char** args = init_args();
+    int num_of_args = _parseCommandLine(this->cmd_line, args);
+    SmallShell& smash = SmallShell::getInstance();
+
+    // Check whether malloc succeed
+    if(!args){
+        cerr << "smash error: malloc failed" << endl;
+        return;
+    }
+
+    // Check validity of arguments
+    if(num_of_args != 3){
+        cerr << "smash error: kill: invalid arguments" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+
+    int signum = 0, jobid = 0;
+
+    // Check validity of jobid
+    if(!is_legit_num(args[2])) {
+        cout << "smash error: kill: invalid arguments" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+
+    int job_id = stoi(args[2]);
+    JobsList::JobEntry* job_to_kill = smash.getJobs()->getJobById(job_id);
+
+    // Check whether job exists
+    if(!job_to_kill) {
+        cout << "smash error: kill: job-id " << job_id << " does not exist" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+
+    // Check whether signum is valid
+    if(!extract_signal_number(args[1], signum)){
+        cout << "smash error: kill: invalid arguments" << endl;
+        free_args(args, num_of_args);
+        return;
+    }
+
+    // Check whether kill succed
+    if(kill(job_to_kill->pid, signum) == -1) {
+        perror("smash error: kill failed");
+        free_args(args, num_of_args);
+        return;
+    }
+
+    cout << "signal number " << signum << " was sent to pid " << job_to_kill->pid << endl;
+
+    if(signum == SIGTSTP) {
+        job_to_kill->isStopped = true;
+    } else if(signum == SIGCONT) {
+        job_to_kill->isStopped = false; // Maybe need to make some signal handler?
+    }
+
+    free_args(args, num_of_args);
 }
-//External commands
+
+
+/////////////////////////////--------------External commands-------//////////////////////////////
 ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {
     // Store the original command line
     backGround = _isBackgroundComamnd(cmd_line);
