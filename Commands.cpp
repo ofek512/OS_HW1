@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <pwd.h>
 
 using namespace std;
 
@@ -198,6 +199,8 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new UnAliasCommand(cmd_line);
     } else if (firstWord =="du") {
         return new DiskUsageCommand(cmd_line);
+    } else if (firstWord == "whoami") {
+        return new WhoAmICommand(cmd_line);
     }
     //if nothing else is matched, we treat as external command.
     return new ExternalCommand(cmd_line);
@@ -1150,14 +1153,36 @@ void DiskUsageCommand::execute() {
     closedir(dir);
 
     // Calculate total size
-    long size = calculate_dir_size(dir_path);
-    if (size < 0) {
+    long size_in_bytes = calculate_dir_size(dir_path);
+    if (size_in_bytes < 0) {
         std::cout << "smash error: du: failed to calculate disk usage" << std::endl;
         return;
     }
 
-    // Convert to kilobytes and display
-    long kb_size = size / 1024;
+    // Convert to KB with proper rounding
+    // This ensures that files less than 1KB still contribute to the total
+    long kb_size = (size_in_bytes + 512) / 1024; // Round up if more than half KB
+
     std::cout << "Total disk usage: " << kb_size << " KB" << std::endl;
 }
 
+WhoAmICommand::WhoAmICommand(const char *cmd_line) : Command(cmd_line) {
+    // No special initialization needed since arguments will be ignored
+}
+
+void WhoAmICommand::execute() {
+    // Get user ID of the current process
+    uid_t uid = getuid();
+
+    // Get user information from user ID
+    struct passwd *pw = getpwuid(uid);
+
+    if (pw == nullptr) {
+        // Error retrieving user information
+        std::cerr << "smash error: whoami: failed to get user information" << std::endl;
+        return;
+    }
+
+    // Output username and home directory
+    std::cout << pw->pw_name << " " << pw->pw_dir << std::endl;
+}
