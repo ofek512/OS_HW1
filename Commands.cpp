@@ -13,6 +13,7 @@
 #include <fstream>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 using namespace std;
 
@@ -195,8 +196,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new KillCommand(cmd_line);
     } else if(firstWord == "unalias") {
         return new UnAliasCommand(cmd_line);
+    } else if (firstWord =="du") {
+        return new DiskUsageCommand(cmd_line);
     }
-
     //if nothing else is matched, we treat as external command.
     return new ExternalCommand(cmd_line);
     //meow
@@ -1077,3 +1079,85 @@ void RedirectionCommand::execute() {
     close(fd);
     close(stdout_copy);
 }
+
+DiskUsageCommand::DiskUsageCommand(const char *cmd_line) : Command(cmd_line) {
+    createSegments(cmd_line, cmd_segments);
+}
+
+long calculate_dir_size(const char* path) {
+    DIR* dir;
+    struct dirent* entry;
+    struct stat file_stat;
+    long size = 0;
+
+    // Open directory
+    if (!(dir = opendir(path))) {
+        return -1;  // Error opening directory
+    }
+
+    // Read directory contents
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip "." and ".." directories
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        // Create full path for the entry
+        char full_path[PATH_MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        // Get file/directory stats
+        if (stat(full_path, &file_stat) == 0) {
+            // Add file size
+            size += file_stat.st_size;
+
+            // If entry is a directory, recursively calculate its size
+            if (S_ISDIR(file_stat.st_mode)) {
+                long dir_size = calculate_dir_size(full_path);
+                if (dir_size >= 0) {
+                    size += dir_size;
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+    return size;
+}
+
+void DiskUsageCommand::execute() {
+    // Check number of arguments
+    if (cmd_segments.size() > 2) {
+        std::cout << "smash error: du: too many arguments" << std::endl;
+        return;
+    }
+
+    // Determine directory path
+    const char* dir_path;
+    if (cmd_segments.size() == 1) {
+        // No path specified, use current directory
+        dir_path = ".";
+    } else {
+        dir_path = cmd_segments[1].c_str();
+    }
+
+    // Check if directory exists
+    DIR* dir = opendir(dir_path);
+    if (dir == NULL) {
+        std::cout << "smash error: du: directory " << dir_path << " does not exist" << std::endl;
+        return;
+    }
+    closedir(dir);
+
+    // Calculate total size
+    long size = calculate_dir_size(dir_path);
+    if (size < 0) {
+        std::cout << "smash error: du: failed to calculate disk usage" << std::endl;
+        return;
+    }
+
+    // Convert to kilobytes and display
+    long kb_size = size / 1024;
+    std::cout << "Total disk usage: " << kb_size << " KB" << std::endl;
+}
+
