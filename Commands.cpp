@@ -210,8 +210,12 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
-    std::string cmd_s = _trim(std::string(cmd_line));
-    std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+//remove finished jobs
+    jobList->removeFinishedJobs();
+
+
+    string cmd_s = _trim(std::string(cmd_line));
+    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
     // Check if the command name is an alias
     if (!aliasMap.empty() && aliasMap.find(firstWord) != aliasMap.end()) {
@@ -219,14 +223,14 @@ void SmallShell::executeCommand(const char *cmd_line) {
         std::string aliasCommand = aliasMap[firstWord];
 
         // Get any arguments that followed the alias
-        std::string args = "";
+        string args = "";
         size_t spacePos = cmd_s.find_first_of(" \n");
-        if (spacePos != std::string::npos) {
+        if (spacePos != string::npos) {
             args = cmd_s.substr(spacePos);
         }
 
         // Create the new command by substituting the alias
-        std::string newCmd = aliasCommand + args;
+        string newCmd = aliasCommand + args;
 
         // Execute the substituted command
         Command* cmd = CreateCommand(newCmd.c_str());
