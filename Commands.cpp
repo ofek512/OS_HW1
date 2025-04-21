@@ -10,6 +10,7 @@
 #include <regex>
 #include <string>
 #include <unistd.h>
+#include <cstring>
 
 using namespace std;
 
@@ -601,30 +602,34 @@ JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
 // unsetenv command
 
 UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
-
 void UnSetEnvCommand::execute() {
+    extern char **environ;  // Access the global environment array directly
+    
     if (cmd_segments.size() < 2) {
         cout << "smash error: unsetenv: not enough arguments" << endl;
         return;
     }
-
-    for (size_t i = 1; i < cmd_segments.size();  i++) {
-        // Get the variable name
+    
+    for (size_t i = 1; i < cmd_segments.size(); i++) {
         string var_name = cmd_segments[i];
-
-        // Check if the variable exists
-        if (getenv(var_name.c_str()) == nullptr) {
-            cout << "smash error: unsetenv: " << var_name << " does not exist" << std::endl;
-            return;
+        string var_prefix = var_name + "=";
+        bool found = false;
+        
+        // Find the index of the environment variable
+        for (int j = 0; environ[j] != nullptr; j++) {
+            // Check if this entry starts with our variable name followed by '='
+            if (strncmp(environ[j], var_prefix.c_str(), var_prefix.length()) == 0) {
+                found = true;
+                
+                // Shift all subsequent elements (including NULL) one position back
+                for (int k = j; environ[k] != nullptr; k++) {
+                    environ[k] = environ[k+1];
+                }
+                
+                break;  // Variable found and removed
+            }
         }
-
-        // Remove the environment variable
-        if (unsetenv(var_name.c_str()) != 0) {
-            perror("smash error: unsetenv failed"); //maybe we need to print
-            return;
-        }
-    }
-}
+        
 
 
 void JobsCommand::execute() {
