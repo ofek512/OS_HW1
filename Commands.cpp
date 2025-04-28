@@ -9,11 +9,9 @@
 #include <regex>
 #include <string>
 #include <unistd.h>
-#include <fstream>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <stdlib.h>
-
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/types.h>
@@ -24,6 +22,8 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <dirent.h>
+
+
 
 using namespace std;
 
@@ -42,6 +42,13 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+
+#define DO_SYS(syscall) do{                                         \
+if ((syscall) == -1) {                                              \
+    string buf = "smash failed: " + string(#syscall) + " failed";   \
+    perror(buf.c_str());                                            \
+    }                                                               \
+} while(0)
 
 string _ltrim(const std::string &s) {
     size_t start = s.find_first_not_of(WHITESPACE);
@@ -174,6 +181,13 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
+    // Pipe command
+    if (strstr(cmd_line, "|")) {
+        return new PipeCommand(cmd_line, PipeCommand::STDOUT);
+    } else if (strstr(cmd_line, "|&")) {
+        return new PipeCommand(cmd_line, PipeCommand::STDERR);
+    }
+
     // Redirection command
     if(strstr(cmd_line, ">>")) {
         return new RedirectionCommand(cmd_line,RedirectionCommand::CONCAT);
@@ -211,7 +225,8 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     } else if (firstWord == "whoami") {
         return new WhoAmICommand(cmd_line);
     } else if (firstWord =="netinfo") {
-        return new NetInfo(cmd_line);
+        return nullptr;
+        //return new NetInfo(cmd_line);
     }
     //if nothing else is matched, we treat as external command.
     return new ExternalCommand(cmd_line);
@@ -554,10 +569,7 @@ void ChangeDirCommand::execute() {
 AliasCommand::AliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void AliasCommand::execute() {
-    // Just 'alias' without arguments - list all aliases
-//    int size = cmd_segments.size();
-//    std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
-//    printf("%d",size);
+
     if (cmd_segments.size() == 1) {
         vector<string> aliases;
         SmallShell::getInstance().getAllAlias(aliases);
@@ -567,8 +579,7 @@ void AliasCommand::execute() {
         return;
     }
 
-    // DEBUG: Print the original command line
-    // std::cerr << "DEBUG: Original cmd_line = '" << cmd_line << "'" << std::endl;
+
 
     // Use the original command line directly
     std::string fullCommand = cmd_line;
@@ -1244,9 +1255,155 @@ void WhoAmICommand::execute() {
     std::cout << pw->pw_name << " " << pw->pw_dir << std::endl;
 }
 
+// Pipe command
+PipeCommand::PipeCommand(const char *cmd_line, Type command_type): Command(cmd_line), command_type(command_type) {
+    string cmd1, cmd2;
+    size_t index;
+    string input(cmd_line);
+    // Look for the delimiter
+    if(command_type == STDOUT){
+        index = input.find('|');
+    } else {
+        index = input.find("|&");
+    }
+
+    // Retrieving the first command
+    cmd1 = _trim(input.substr(0, index));
+    command1 = (char*) malloc(sizeof (char) * (cmd1.length() + 1));
+
+    // Check whether malloc succeed
+    if(!command1) {
+        perror("smash error: malloc failed");
+        throw bad_alloc();
+    }
+
+    strcpy(command1, cmd1.c_str());
+
+    // Retrieving the second command
+
+    cmd2 = _trim(input.substr(index + command_type));
+    command2 = (char*) malloc(sizeof(char) * (cmd2.length() + 1));
+
+    // Check whether malloc succeed
+    if(!command2){
+        perror("smash error: malloc failed");
+        free(command1);
+        throw bad_alloc();
+    }
+
+    strcpy(command2, cmd2.c_str());
+}
+
+void PipeCommand::execute() {
+    int fd[2];
+    if (pipe(fd) == -1) {
+        perror("smash error: pipe failed");
+        return;
+    }
+
+    pid_t pid1 = fork();
+    // Check whether fork succeed
+    if(pid1 == -1){
+        perror("smash error: fork failed");
+        close_pipe(fd);
+        return;
+    }
+
+    // Writer process
+    if(pid1 == 0){
+        // Set gid to pid
+        if(setpgrp() == -1){
+            perror("smash error: setpgrp failed");
+            close_pipe(fd);
+            return;
+        }
+        // Redirect output
+        if(command_type == STDOUT) {
+            if(dup2(fd[1], 1) == -1) {
+                perror("smash error: dup2 failed");
+                close_pipe(fd);
+                return;
+            }
+        } else {
+            if(dup2(fd[1], 2) == -1) {
+                perror("smash error: dup2 failed");
+                close_pipe(fd);
+                return;
+            }
+        }
+        if(!close_pipe(fd)) return;
+        SmallShell::getInstance().executeCommand(command1);
+        exit(1);
+    }
+
+    pid_t pid2 = fork();
+    if(pid2 == -1) {
+        perror("smash error: fork failed");
+        close_pipe(fd);
+        return;
+    }
+
+    // Reader process
+    if(pid2 == 0){
+        // Change gid to pid
+        if(setpgrp() == -1) {
+            perror("smash error: setpgrp failed");
+            close_pipe(fd);
+            return;
+        }
+
+        // Redirect input
+        if(dup2(fd[0], 0) == -1) {
+            perror("smash error: dup2 failed");
+            close_pipe(fd);
+            return;
+        }
+        if (!close_pipe(fd)) return;
+        SmallShell::getInstance().executeCommand(command2);
+        exit(1);
+    }
+
+    // Closing pipe
+    if(!close_pipe(fd)) return;
+
+    // Wait child processes
+
+    if (waitpid(pid1, nullptr, WUNTRACED) == -1) {
+        perror("smash error: waitpid failed");
+        return;
+    }
+
+    if (waitpid(pid2, nullptr, WUNTRACED) == -1) {
+        perror("smash error: waitpid failed");
+        return;
+    }
+
+
+}
+
+bool PipeCommand::close_pipe(int *fd) {
+    bool ret = true;
+    if (close(fd[0]) == -1){
+        perror("smash error: close failed");
+        ret = false;
+    }
+    if (close(fd[1]) == -1){
+        perror("smash error: close failed");
+        ret = false;
+    }
+    return ret;
+} // Helper function to close both file descriptors of the pipe
+
+PipeCommand::~PipeCommand() {
+    free(command1);
+    free(command2);
+}
+
+/*
 NetInfo::NetInfo(const char *cmd_line) : Command(cmd_line) {
     createSegments(cmd_line, cmd_segments);
 }
+*/
 
 // void NetInfo::execute() {
 //     // Check if interface is specified
@@ -1407,6 +1564,7 @@ std::string getPrimaryInterface() {
     return "lo";
 }
 
+/*
 void NetInfo::execute() {
     // Check if interface is specified
     if (cmd_segments.size() < 2) {
@@ -1564,3 +1722,4 @@ void NetInfo::execute() {
 
     freeifaddrs(ifaddr);
 }
+*/

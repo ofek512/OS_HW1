@@ -27,7 +27,6 @@ public:
 
     //virtual void prepare();
     //virtual void cleanup();
-    // TODO: Add your extra methods if needed
     /*string getPath();
     void setPath(string path);*/
     string getCommandS();
@@ -83,7 +82,6 @@ public:
 
 class SmallShell {
 private:
-    // TODO: Add your data members
     map<string,string> aliasMap;
     vector<string> sortedAlias;
     string prompt;
@@ -285,10 +283,22 @@ public:
 class PipeCommand : public Command {
     // TODO: Add your data members
 public:
-    PipeCommand(const char *cmd_line);
 
-    virtual ~PipeCommand() {
-    }
+    char* command1;
+    char* command2;
+
+    enum Type{
+        STDOUT = 1,
+        STDERR = 2
+    };
+
+    Type command_type;
+
+    PipeCommand(const char *cmd_line, Type command_type);
+
+    virtual ~PipeCommand();
+
+    bool close_pipe(int* fd);
 
     void execute() override;
 };

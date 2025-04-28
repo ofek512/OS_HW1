@@ -6,5 +6,17 @@
 using namespace std;
 
 void ctrlCHandler(int sig_num) {
-    // TODO: Add your implementation
+    cout << "smash: got ctrl-C" << endl;
+
+    SmallShell& smash = SmallShell::getInstance();
+
+    if(smash.current_process != -1) {
+        if(kill(smash.current_process, 2) == -1){
+            perror("smash error: kill failed");
+            return;
+        }
+
+        cout << "smash: process " << smash.current_process << " was killed" << endl;
+        smash.current_process = -1;
+    }
 }
