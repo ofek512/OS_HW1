@@ -1,4 +1,3 @@
-#include <unistd.h>
 #include <string.h>
 #include <iostream>
 #include <vector>
@@ -13,6 +12,8 @@
 #include <fstream>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <stdlib.h>
+
 #include <dirent.h>
 #include <pwd.h>
 
@@ -361,7 +362,7 @@ void JobsList::removeJobById(int jobId) {
 
 void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
     removeFinishedJobs();
-    int it = 0;
+    int it = 1;
     while(job_map[it] != nullptr && it++ != 100){}
 
     if(it == 100){
@@ -796,38 +797,80 @@ void WatchProcCommand::execute() {
     }
 
     int pid = stoi(args[1]);
-    ifstream memory_file("/proc/" + to_string(pid) + "/status");
+    //ifstream memory_file("/proc/" + to_string(pid) + "/status");
+
+    string memory_path = ("/proc/" + to_string(pid) + "/status");
+    int memory_fd = open(memory_path.c_str(), O_RDONLY);
 
     // Check whether pid exists
-    if(!memory_file.is_open()){
+    if(memory_fd == -1){
         cout << "smash error: watchproc: pid " << pid << " does not exist" << endl;
         free_args(args, num_of_args);
         return;
     }
 
-    int memory_usage = 0;
-    string line;
-    while(getline(memory_file, line)){
-        if(line.find("VmRSS") == 0){
-            istringstream iss(line);
-            string temp;
-            iss >> temp >> memory_usage;
-        }
+    char buffer[4096] = {0};
+    ssize_t bytes_read = read(memory_fd, buffer, sizeof(buffer) - 1);
+    close(memory_fd);
+
+    // Check whether read succeed
+    if(bytes_read <= 0) {
+        perror("smash error: read failed");
+        free_args(args, num_of_args);
+        return;
     }
-    memory_file.close();
+
+    buffer[bytes_read] = '\0';
+
+    int memory_usage = 0;
+    char* line = strtok(buffer, "\n");
+    while(line){
+        if(strncmp(line, "VmRSS:", 6) == 0) {
+            char* value_start = line + 6;
+            // Skip whitespaces
+            while(*value_start == ' ' || *value_start == '\t') {
+                value_start++;
+            }
+            memory_usage = atoi(value_start);
+            break;
+        }
+        line = strtok(nullptr, "\n");
+    }
 
     // CPU file
-    ifstream cpu_file("/proc/" + to_string(pid) + "/stat");
+    string cpu_path = "/proc/" + to_string(pid) + "/stat";
+    int cpu_fd = open(cpu_path.c_str(), O_RDONLY);
+
+    if(cpu_fd == -1){
+        perror("smash error: open failed");
+        free_args(args, num_of_args);
+        return;
+    }
+
+    memset(buffer, 0, sizeof(buffer));
+    bytes_read = read(cpu_fd, buffer, sizeof(buffer) - 1);
+    close(cpu_fd);
+
+    // Check whether read succeed
+    if(bytes_read <= -1) {
+        perror("smash error: read failed");
+        free_args(args, num_of_args);
+        return;
+    }
+
+    buffer[bytes_read] = '\0';
+
     long utime = 0, stime = 0;
     int field = 0;
 
     // Retrieve CPU stats
-    while(cpu_file >> line){
+    char* cpu_line = strtok(buffer, " ");
+    while(cpu_line){
         field++;
         if(field == 14) {
-            utime = stol(line);
+            utime = atol(cpu_line);
         } else if (field == 15){
-            stime = stol(line);
+            stime = atol(cpu_line);
             break;
         }
     }
@@ -988,7 +1031,7 @@ void ExternalCommand::execute() {
             // Wait for child process to complete if not a background command
             smash.current_process = pid;
             int status;
-            if (waitpid(pid, &status, WUNTRACED) == -1) {
+            if (waitpid(pid, &status, WUNTRACED) == -1)  {
                 perror("smash error: waitpid failed");
             }
             smash.current_process = -1;
