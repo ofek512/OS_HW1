@@ -199,6 +199,10 @@ Command *SmallShell::CreateCommand(char* cmd_line) {
     if(strstr(cmd_line, "*") || strstr(cmd_line, "?")) {
         return new ComplexExternalCommand(cmd_line);
     }
+    //check if the command first word ends with &
+    if(firstWord.back() == '&') {
+        firstWord.pop_back();
+    }
 
     // TODO: change to factory
     if (firstWord == "chprompt") {
@@ -450,7 +454,7 @@ bool SmallShell::validCommand(string name) {
 //todo important to add this to constructor of smallshell
 void SmallShell::createCommandVector() {
     commands = {"chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
-                     "kill", "unalias", "alias", "unsetenv", "watchproc"};
+                "kill", "unalias", "alias", "unsetenv", "watchproc"};
 }
 
 
@@ -509,7 +513,7 @@ void ChpromptCommand::execute()
         if(prompt.empty()) {
             newSmashPrompt="smash";
         }
-        //if prompt is not empty, set new prompt
+            //if prompt is not empty, set new prompt
         else {
             newSmashPrompt=prompt;
         }
@@ -1138,7 +1142,7 @@ void ComplexExternalCommand::execute() {
 
 // Redirection command
 RedirectionCommand::RedirectionCommand( char *cmd_line, command_type type):
-                                       Command(cmd_line), type(type) {
+        Command(cmd_line), type(type) {
     string cmd;
     string file;
     size_t index = 0;
