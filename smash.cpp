@@ -13,6 +13,10 @@ int main(int argc, char *argv[]) {
 
     SmallShell &smash = SmallShell::getInstance();
     while (true) {
+        //maybe this fixes the problem
+        fflush(stdout);
+        fflush(stderr);
+        
         std::cout << smash.getPrompt() << "> ";
         std::string cmd_line;
         std::getline(std::cin, cmd_line);
