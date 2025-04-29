@@ -19,7 +19,7 @@ protected:
     vector<string> cmd_segments;
     const char* cmd_line;
 public:
-    explicit Command(const char *cmd_line): cmd_line(cmd_line){};
+    explicit Command( char *cmd_line): cmd_line(cmd_line){};
 
     virtual ~Command() = default;
 
@@ -93,7 +93,7 @@ private:
 public:
     pid_t current_process;
     pid_t pid;
-    Command *CreateCommand(const char *cmd_line);
+    Command *CreateCommand(char* cmd_line);
 
     SmallShell(SmallShell const &) = delete; // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
@@ -106,7 +106,7 @@ public:
 
     ~SmallShell();
 
-    void executeCommand(const char *cmd_line);
+    void executeCommand( char *cmd_line);
 
 
     // TODO: add extra methods as needed
@@ -129,7 +129,7 @@ public:
 
 class BuiltInCommand : public Command {
 public:
-    explicit BuiltInCommand(const char *cmd_line);
+    explicit BuiltInCommand( char *cmd_line);
 
     virtual ~BuiltInCommand() {
     }
@@ -138,7 +138,7 @@ public:
 class ChpromptCommand : public BuiltInCommand {
 public:
     string newSmashPrompt;
-    ChpromptCommand(const char* cmd_line);
+    ChpromptCommand( char* cmd_line);
     virtual ~ChpromptCommand() {}
     void execute() override;
 }; // DONE
@@ -147,7 +147,7 @@ class ChangeDirCommand : public BuiltInCommand {
 public:
     // TODO: Add your data members public:
     char** plastPwd;
-    ChangeDirCommand(const char *cmd_line, char **plastPwd);
+    ChangeDirCommand( char *cmd_line, char **plastPwd);
 
     virtual ~ChangeDirCommand() = default;
 
@@ -156,7 +156,7 @@ public:
 
 class GetCurrDirCommand : public BuiltInCommand {
 public:
-    GetCurrDirCommand(const char *cmd_line);
+    GetCurrDirCommand( char *cmd_line);
 
     virtual ~GetCurrDirCommand() {
     }
@@ -166,7 +166,7 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    explicit ShowPidCommand(const char *cmd_line);
+    explicit ShowPidCommand( char *cmd_line);
 
     virtual ~ShowPidCommand() = default;
 
@@ -178,7 +178,7 @@ class QuitCommand : public BuiltInCommand {
 public:
     JobsList* jobs;
 
-    QuitCommand(const char *cmd_line, JobsList *jobs);
+    QuitCommand( char *cmd_line, JobsList *jobs);
 
     virtual ~QuitCommand() {
     }
@@ -189,7 +189,7 @@ public:
 class JobsCommand : public BuiltInCommand {
     //JobsList* jobs;
 public:
-    JobsCommand(const char *cmd_line);
+    JobsCommand( char *cmd_line);
 
     virtual ~JobsCommand() {
     }
@@ -200,7 +200,7 @@ public:
 class KillCommand : public BuiltInCommand {
     // TODO: Add your data members
 public:
-    KillCommand(const char *cmd_line);
+    KillCommand( char *cmd_line);
 
     virtual ~KillCommand() {
     }
@@ -211,7 +211,7 @@ public:
 class ForegroundCommand : public BuiltInCommand {
     // TODO: Add your data members
 public:
-    ForegroundCommand(const char *cmd_line);
+    ForegroundCommand( char *cmd_line);
 
     virtual ~ForegroundCommand() {
     }
@@ -221,7 +221,7 @@ public:
 
 class AliasCommand : public BuiltInCommand {
 public:
-    AliasCommand(const char *cmd_line);
+    AliasCommand( char *cmd_line);
 
     virtual ~AliasCommand() {
     }
@@ -231,7 +231,7 @@ public:
 
 class UnAliasCommand : public BuiltInCommand {
 public:
-    UnAliasCommand(const char *cmd_line);
+    UnAliasCommand( char *cmd_line);
 
     virtual ~UnAliasCommand() {
     }
@@ -241,7 +241,7 @@ public:
 
 class UnSetEnvCommand : public BuiltInCommand {
 public:
-    UnSetEnvCommand(const char *cmd_line);
+    UnSetEnvCommand( char *cmd_line);
 
     virtual ~UnSetEnvCommand() {
     }
@@ -251,7 +251,7 @@ public:
 
 class WatchProcCommand : public BuiltInCommand {
 public:
-    WatchProcCommand(const char *cmd_line);
+    WatchProcCommand( char *cmd_line);
 
     virtual ~WatchProcCommand() {
     }
@@ -273,7 +273,7 @@ public:
 
     command_type type;
 
-    explicit RedirectionCommand(const char *cmd_line, command_type type);
+    explicit RedirectionCommand( char *cmd_line, command_type type);
 
     virtual ~RedirectionCommand();
 
@@ -294,7 +294,7 @@ public:
 
     Type command_type;
 
-    PipeCommand(const char *cmd_line, Type command_type);
+    PipeCommand( char *cmd_line, Type command_type);
 
     virtual ~PipeCommand();
 
@@ -305,7 +305,7 @@ public:
 
 class DiskUsageCommand : public Command {
 public:
-    DiskUsageCommand(const char *cmd_line);
+    DiskUsageCommand( char *cmd_line);
 
     virtual ~DiskUsageCommand() {
     }
@@ -315,7 +315,7 @@ public:
 
 class WhoAmICommand : public Command {
 public:
-    WhoAmICommand(const char *cmd_line);
+    WhoAmICommand( char *cmd_line);
 
     virtual ~WhoAmICommand() {
     }
@@ -326,7 +326,7 @@ public:
 class NetInfo : public Command {
     // TODO: Add your data members **BONUS: 10 Points**
 public:
-    NetInfo(const char *cmd_line);
+    NetInfo( char *cmd_line);
 
     virtual ~NetInfo() {
     }
@@ -336,9 +336,20 @@ public:
 
 class ExternalCommand : public Command {
 public:
-    ExternalCommand(const char *cmd_line);
+    ExternalCommand(char *cmd_line);
 
     virtual ~ExternalCommand() {
+    }
+
+    void execute() override;
+}; // DONE
+
+class ComplexExternalCommand : public Command {
+public:
+    char* bash_args[4];
+    ComplexExternalCommand(char *cmd_line);
+
+    virtual ~ComplexExternalCommand() {
     }
 
     void execute() override;

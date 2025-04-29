@@ -176,7 +176,7 @@ SmallShell::~SmallShell() {
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
-Command *SmallShell::CreateCommand(const char *cmd_line) {
+Command *SmallShell::CreateCommand(char* cmd_line) {
 
     std::string cmd_s = _trim(std::string(cmd_line));
     std::string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
@@ -193,6 +193,11 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new RedirectionCommand(cmd_line,RedirectionCommand::CONCAT);
     } else if(strstr(cmd_line, ">")) {
         return new RedirectionCommand(cmd_line, RedirectionCommand::TRUNCATE);
+    }
+
+    // Complex external command
+    if(strstr(cmd_line, "*") || strstr(cmd_line, "?")) {
+        return new ComplexExternalCommand(cmd_line);
     }
 
     // TODO: change to factory
@@ -235,7 +240,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     return nullptr;
 }
 
-void SmallShell::executeCommand(const char *cmd_line) {
+void SmallShell::executeCommand(char *cmd_line) {
 //remove finished jobs
     jobList->removeFinishedJobs();
 
@@ -259,7 +264,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
         string newCmd = aliasCommand + args;
 
         // Execute the substituted command
-        Command* cmd = CreateCommand(newCmd.c_str());
+        Command* cmd = CreateCommand(const_cast<char *>(newCmd.c_str()));
         if (cmd == nullptr) {
             return;
         }
@@ -470,7 +475,7 @@ bool SmallShell::removeAlias(string name){
 
 /////////////////////////////--------------Built-in commands-------//////////////////////////////
 
-void createSegments(const char* cmd_line, vector<string>& segments)
+void createSegments( char* cmd_line, vector<string>& segments)
 {
     std::string temp=cmd_line;
     std::string toAdd;
@@ -483,12 +488,16 @@ void createSegments(const char* cmd_line, vector<string>& segments)
     }
 }
 
-BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line){
+BuiltInCommand::BuiltInCommand( char *cmd_line): Command(cmd_line){
+    // Ignore background command
+    if(_isBackgroundComamnd(cmd_line)) {
+        _removeBackgroundSign(cmd_line);
+    }
     createSegments(cmd_line, cmd_segments);
     //TODO: need to add check for whether command is background
 }
 
-ChpromptCommand::ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line), newSmashPrompt("smash") {}
+ChpromptCommand::ChpromptCommand( char* cmd_line) : BuiltInCommand(cmd_line), newSmashPrompt("smash") {}
 
 void ChpromptCommand::execute()
 {
@@ -516,7 +525,7 @@ void ChpromptCommand::execute()
 }
 
 /* ShowPid command */
-ShowPidCommand::ShowPidCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+ShowPidCommand::ShowPidCommand( char *cmd_line): BuiltInCommand(cmd_line){}
 
 void ShowPidCommand::execute() {
     SmallShell &shell = SmallShell::getInstance();
@@ -525,7 +534,7 @@ void ShowPidCommand::execute() {
 }
 
 /* cd command */
-ChangeDirCommand::ChangeDirCommand(const char *cmd_line, char **plastPwd): BuiltInCommand(cmd_line),
+ChangeDirCommand::ChangeDirCommand( char *cmd_line, char **plastPwd): BuiltInCommand(cmd_line),
                                                                            plastPwd(plastPwd){}
 void ChangeDirCommand::execute() {
     char** args = init_args();
@@ -566,7 +575,7 @@ void ChangeDirCommand::execute() {
 }
 
 // Alias command
-AliasCommand::AliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+AliasCommand::AliasCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void AliasCommand::execute() {
 
@@ -622,7 +631,7 @@ void AliasCommand::execute() {
 }
 
 // Unalias command
-UnAliasCommand::UnAliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+UnAliasCommand::UnAliasCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void UnAliasCommand::execute() {
     char** args = init_args();
@@ -655,7 +664,7 @@ void UnAliasCommand::execute() {
 }
 
 // Quit command
-QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs):BuiltInCommand(cmd_line),jobs(jobs){}
+QuitCommand::QuitCommand( char *cmd_line, JobsList *jobs):BuiltInCommand(cmd_line),jobs(jobs){}
 
 void QuitCommand::execute() {
     //check if there is argument for kill
@@ -672,43 +681,50 @@ void QuitCommand::execute() {
 }
 
 // pwd command
-GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+GetCurrDirCommand::GetCurrDirCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void GetCurrDirCommand::execute() {
     cout << SmallShell::getInstance().getCurrWorkingDir() << endl;
 }
 
-char* SmallShell::getCurrWorkingDir() const {
+char* SmallShell::getCurrWorkingDir()  const{
     char* current_path = getcwd(NULL, 0);
     return current_path;
 }
 
 // Jobs command
-JobsCommand::JobsCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
+JobsCommand::JobsCommand( char* cmd_line): BuiltInCommand(cmd_line){}
 
 // unsetenv command
-UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+UnSetEnvCommand::UnSetEnvCommand( char *cmd_line): BuiltInCommand(cmd_line){}
+
 
 void UnSetEnvCommand::execute() {
+    extern char **environ;  // Access the global environment array directly
+
     if (cmd_segments.size() < 2) {
         cout << "smash error: unsetenv: not enough arguments" << endl;
         return;
     }
 
-    for (size_t i = 1; i < cmd_segments.size();  i++) {
-        // Get the variable name
+    for (size_t i = 1; i < cmd_segments.size(); i++) {
         string var_name = cmd_segments[i];
+        string var_prefix = var_name + "=";
+        bool found = false;
 
-        // Check if the variable exists
-        if (getenv(var_name.c_str()) == nullptr) {
-            cout << "smash error: unsetenv: " << var_name << " does not exist" << std::endl;
-            return;
-        }
+        // Find the index of the environment variable
+        for (int j = 0; environ[j] != nullptr; j++) {
+            // Check if this entry starts with our variable name followed by '='
+            if (strncmp(environ[j], var_prefix.c_str(), var_prefix.length()) == 0) {
+                found = true;
 
-        // Remove the environment variable
-        if (unsetenv(var_name.c_str()) != 0) {
-            perror("smash error: unsetenv failed"); //maybe we need to print
-            return;
+                // Shift all subsequent elements (including NULL) one position back
+                for (int k = j; environ[k] != nullptr; k++) {
+                    environ[k] = environ[k + 1];
+                }
+
+                break;  // Variable found and removed
+            }
         }
     }
 }
@@ -719,7 +735,7 @@ void JobsCommand::execute() {
 }
 
 // ForeGround command
-ForegroundCommand::ForegroundCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+ForegroundCommand::ForegroundCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void ForegroundCommand::execute() {
     char** args = init_args();
@@ -799,7 +815,7 @@ void ForegroundCommand::execute() {
 }
 
 // Watchproc command
-WatchProcCommand::WatchProcCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+WatchProcCommand::WatchProcCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void WatchProcCommand::execute() {
     char** args = init_args();
@@ -903,7 +919,7 @@ void WatchProcCommand::execute() {
 } // Need to check calculation of CPU time
 
 // Kill command
-KillCommand::KillCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+KillCommand::KillCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void KillCommand::execute() {
     char** args = init_args();
@@ -970,18 +986,18 @@ void KillCommand::execute() {
 
 /////////////////////////////--------------External commands-------//////////////////////////////
 
-ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line) {
+ExternalCommand::ExternalCommand(char *cmd_line) : Command(cmd_line) {
     // Store the original command line
     backGround = _isBackgroundComamnd(cmd_line);
 
     // Create a clean version of the command for segments
     std::string clean_cmd_line = cmd_line;
+    //todo check this
     if (backGround) {
+        _removeBackgroundSign(cmd_line);
         // Create a modifiable copy of the command line
         char* cmd_copy = strdup(cmd_line);
         if (cmd_copy) {
-            // Remove the & sign
-            _removeBackgroundSign(cmd_copy);
             // Store the clean command segments
             createSegments(cmd_copy, cmd_segments);
             free(cmd_copy);
@@ -1065,10 +1081,63 @@ void ExternalCommand::execute() {
     }
 }
 
+// Complex external command
+ComplexExternalCommand::ComplexExternalCommand(char *cmd_line): Command(cmd_line), bash_args() {
+    backGround = _isBackgroundComamnd(cmd_line);
+
+    if(backGround) {
+        _removeBackgroundSign(cmd_line);
+    }
+
+    bash_args[0] = (char*)"/bin/bash";
+    bash_args[1] = (char*)"-c";
+    bash_args[2] = (char*)cmd_line;
+    bash_args[3] = nullptr;
+
+}
+
+void ComplexExternalCommand::execute() {
+    pid_t pid = fork();
+
+    if(pid == -1) {
+        perror("smash error: fork failed");
+        return;
+    }
+    // Child process
+    if(pid == 0) {
+
+        if(setpgrp() == -1) {
+            perror("smash error: setpgrp failed");
+            return;
+        }
+
+        execv("/bin/bash", bash_args);
+
+        perror("smash error: execv failed");
+        exit(1);
+    } else {
+        // Parent process
+        SmallShell& smash = SmallShell::getInstance();
+
+        if(!backGround) {
+            smash.current_process = pid;
+            int status;
+            // Run in background
+            if(waitpid(pid, &status, WUNTRACED) == -1) {
+                perror("smash error: waitpid failed");
+                return;
+            }
+            smash.current_process = -1;
+        } else {
+            // Add to joblist
+            smash.getJobs()->addJob(this, pid, false);
+        }
+    }
+}
 /////////////////////////////--------------Special commands-------//////////////////////////////
 
 // Redirection command
-RedirectionCommand::RedirectionCommand(const char *cmd_line, command_type type):
+RedirectionCommand::RedirectionCommand( char *cmd_line, command_type type):
                                        Command(cmd_line), type(type) {
     string cmd;
     string file;
@@ -1151,7 +1220,7 @@ void RedirectionCommand::execute() {
     close(stdout_copy);
 }
 
-DiskUsageCommand::DiskUsageCommand(const char *cmd_line) : Command(cmd_line) {
+DiskUsageCommand::DiskUsageCommand( char *cmd_line) : Command(cmd_line) {
     createSegments(cmd_line, cmd_segments);
 }
 
@@ -1234,7 +1303,7 @@ void DiskUsageCommand::execute() {
     std::cout << "Total disk usage: " << kb_size << " KB" << std::endl;
 }
 
-WhoAmICommand::WhoAmICommand(const char *cmd_line) : Command(cmd_line) {
+WhoAmICommand::WhoAmICommand( char *cmd_line) : Command(cmd_line) {
     // No special initialization needed since arguments will be ignored
 }
 
@@ -1256,7 +1325,7 @@ void WhoAmICommand::execute() {
 }
 
 // Pipe command
-PipeCommand::PipeCommand(const char *cmd_line, Type command_type): Command(cmd_line), command_type(command_type) {
+PipeCommand::PipeCommand( char *cmd_line, Type command_type): Command(cmd_line), command_type(command_type) {
     string cmd1, cmd2;
     size_t index;
     string input(cmd_line);
