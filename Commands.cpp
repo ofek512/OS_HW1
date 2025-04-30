@@ -1312,20 +1312,85 @@ WhoAmICommand::WhoAmICommand( char *cmd_line) : Command(cmd_line) {
 }
 
 void WhoAmICommand::execute() {
-    // Get user ID of the current process
+    // Get current user ID
     uid_t uid = getuid();
-
-    // Get user information from user ID
-    struct passwd *pw = getpwuid(uid);
-
-    if (pw == nullptr) {
-        // Error retrieving user information
-        std::cerr << "smash error: whoami: failed to get user information" << std::endl;
+    std::string uid_str = std::to_string(uid);
+    
+    // Use environment variables if available (simplest approach)
+    char* username_env = getenv("USER");
+    char* home_env = getenv("HOME");
+    
+    if (username_env && home_env) {
+        std::cout << username_env << " " << home_env << std::endl;
         return;
     }
-
-    // Output username and home directory
-    std::cout << pw->pw_name << " " << pw->pw_dir << std::endl;
+    
+    // If environment variables aren't available, read directly from /etc/passwd
+    int fd = open("/etc/passwd", O_RDONLY);
+    if (fd == -1) {
+        std::cerr << "smash error: whoami: cannot open passwd file" << std::endl;
+        return;
+    }
+    
+    char buffer[4096] = {0};
+    read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+    
+    char* line = strtok(buffer, "\n");
+    while (line) {
+        std::string entry(line);
+        size_t pos = 0;
+        std::string username;
+        std::string home_dir;
+        
+        // Get username (field 1)
+        pos = entry.find(':');
+        if (pos == std::string::npos) {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+        username = entry.substr(0, pos);
+        
+        // Skip password field (field 2)
+        entry = entry.substr(pos + 1);
+        pos = entry.find(':');
+        if (pos == std::string::npos) {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+        entry = entry.substr(pos + 1);
+        
+        // Get UID (field 3)
+        pos = entry.find(':');
+        if (pos == std::string::npos) {
+            line = strtok(NULL, "\n");
+            continue;
+        }
+        std::string uid_field = entry.substr(0, pos);
+        if (uid_field == uid_str) {
+            // Found our user, now get home directory
+            entry = entry.substr(pos + 1);
+            
+            // Skip GID and GECOS fields (fields 4 and 5)
+            for (int i = 0; i < 2; i++) {
+                pos = entry.find(':');
+                if (pos == std::string::npos) break;
+                entry = entry.substr(pos + 1);
+            }
+            
+            // Get home directory (field 6)
+            pos = entry.find(':');
+            if (pos != std::string::npos) {
+                home_dir = entry.substr(0, pos);
+                std::cout << username << " " << home_dir << std::endl;
+                return;
+            }
+        }
+        
+        line = strtok(NULL, "\n");
+    }
+    
+    std::cerr << "smash error: whoami: user not found" << std::endl;
 }
 
 // Pipe command
