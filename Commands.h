@@ -5,7 +5,17 @@ using namespace std;
 #include <vector>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
+#include <vector>
+#include <string>
+#include <unordered_set>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <iostream>
+#include <cstring>
+#include <limits.h>
+
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -304,6 +314,62 @@ public:
 };
 
 class DiskUsageCommand : public Command {
+private:
+    std::unordered_set<ino_t> counted_inodes;
+    long calculate_dir_size(const char* path) {
+        // First, count the directory itself
+        struct stat path_stat;
+        if (lstat(path, &path_stat) != 0) {
+            return 0;  // Can't stat the main path
+        }
+
+        // Count this directory's blocks
+        long size = path_stat.st_blocks * 512;
+
+        // Add the directory to counted_inodes to avoid double-counting
+        counted_inodes.insert(path_stat.st_ino);
+
+        DIR* dir = opendir(path);
+        if (!dir) {
+            return size;  // Return the size we have so far if can't read dir contents
+        }
+
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != NULL) {
+            // Skip "." and ".." directories
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                continue;
+            }
+
+            // Create full path for the entry
+            char full_path[PATH_MAX];
+            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+            // Use lstat instead of stat to not follow symlinks
+            struct stat file_stat;
+            if (lstat(full_path, &file_stat) == 0) {
+                // Only count each inode once (prevents double-counting hard links)
+                if (counted_inodes.find(file_stat.st_ino) == counted_inodes.end()) {
+                    counted_inodes.insert(file_stat.st_ino);
+
+                    // Use st_blocks which gives actual 512-byte blocks allocated
+                    size += file_stat.st_blocks * 512;
+
+                    // If entry is a directory (but not a symlink), recursively calculate its size
+                    if (S_ISDIR(file_stat.st_mode) && !S_ISLNK(file_stat.st_mode)) {
+                        long dir_size = calculate_dir_size(full_path);
+                        if (dir_size >= 0) {
+                            size += dir_size;
+                        }
+                    }
+                }
+            }
+        }
+
+        closedir(dir);
+        return size;
+    }
+
 public:
     DiskUsageCommand( char *cmd_line);
 

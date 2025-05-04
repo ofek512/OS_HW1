@@ -1071,8 +1071,7 @@ void ExternalCommand::execute() {
         if (!backGround) {
             // Wait for child process to complete if not a background command
             smash.current_process = pid;
-            int status;
-            if (waitpid(pid, &status, WUNTRACED) == -1)  {
+            if (waitpid(pid, nullptr, 0) == -1)  {
                 perror("smash error: waitpid failed");
             }
             smash.current_process = -1;
@@ -1127,7 +1126,7 @@ void ComplexExternalCommand::execute() {
             smash.current_process = pid;
             int status;
             // Run in background
-            if(waitpid(pid, &status, WUNTRACED) == -1) {
+            if(waitpid(pid, &status, 0) == -1) {
                 perror("smash error: waitpid failed");
                 return;
             }
@@ -1228,46 +1227,6 @@ DiskUsageCommand::DiskUsageCommand( char *cmd_line) : Command(cmd_line) {
     createSegments(cmd_line, cmd_segments);
 }
 
-long calculate_dir_size(const char* path) {
-    DIR* dir;
-    struct dirent* entry;
-    struct stat file_stat;
-    long size = 0;
-
-    // Open directory
-    if (!(dir = opendir(path))) {
-        return -1;  // Error opening directory
-    }
-
-    // Read directory contents
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip "." and ".." directories
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
-        // Create full path for the entry
-        char full_path[PATH_MAX];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        // Get file/directory stats
-        if (stat(full_path, &file_stat) == 0) {
-            // Add file size
-            size += file_stat.st_size;
-
-            // If entry is a directory, recursively calculate its size
-            if (S_ISDIR(file_stat.st_mode)) {
-                long dir_size = calculate_dir_size(full_path);
-                if (dir_size >= 0) {
-                    size += dir_size;
-                }
-            }
-        }
-    }
-
-    closedir(dir);
-    return size;
-}
 
 void DiskUsageCommand::execute() {
     // Check number of arguments
@@ -1293,6 +1252,9 @@ void DiskUsageCommand::execute() {
     }
     closedir(dir);
 
+    // Clear the inode tracking set before calculation
+    counted_inodes.clear();
+
     // Calculate total size
     long size_in_bytes = calculate_dir_size(dir_path);
     if (size_in_bytes < 0) {
@@ -1300,9 +1262,8 @@ void DiskUsageCommand::execute() {
         return;
     }
 
-    // Convert to KB with proper rounding
-    // This ensures that files less than 1KB still contribute to the total
-    long kb_size = (size_in_bytes + 512) / 1024; // Round up if more than half KB
+    // Convert to KB (1024 bytes = 1 KB)
+    long kb_size = (size_in_bytes + 1023) / 1024; // Round up to nearest KB
 
     std::cout << "Total disk usage: " << kb_size << " KB" << std::endl;
 }
@@ -1315,34 +1276,34 @@ void WhoAmICommand::execute() {
     // Get current user ID
     uid_t uid = getuid();
     std::string uid_str = std::to_string(uid);
-    
+
     // Use environment variables if available (simplest approach)
     char* username_env = getenv("USER");
     char* home_env = getenv("HOME");
-    
+
     if (username_env && home_env) {
         std::cout << username_env << " " << home_env << std::endl;
         return;
     }
-    
+
     // If environment variables aren't available, read directly from /etc/passwd
     int fd = open("/etc/passwd", O_RDONLY);
     if (fd == -1) {
         std::cerr << "smash error: whoami: cannot open passwd file" << std::endl;
         return;
     }
-    
+
     char buffer[4096] = {0};
     read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
-    
+
     char* line = strtok(buffer, "\n");
     while (line) {
         std::string entry(line);
         size_t pos = 0;
         std::string username;
         std::string home_dir;
-        
+
         // Get username (field 1)
         pos = entry.find(':');
         if (pos == std::string::npos) {
@@ -1350,7 +1311,7 @@ void WhoAmICommand::execute() {
             continue;
         }
         username = entry.substr(0, pos);
-        
+
         // Skip password field (field 2)
         entry = entry.substr(pos + 1);
         pos = entry.find(':');
@@ -1359,7 +1320,7 @@ void WhoAmICommand::execute() {
             continue;
         }
         entry = entry.substr(pos + 1);
-        
+
         // Get UID (field 3)
         pos = entry.find(':');
         if (pos == std::string::npos) {
@@ -1370,14 +1331,14 @@ void WhoAmICommand::execute() {
         if (uid_field == uid_str) {
             // Found our user, now get home directory
             entry = entry.substr(pos + 1);
-            
+
             // Skip GID and GECOS fields (fields 4 and 5)
             for (int i = 0; i < 2; i++) {
                 pos = entry.find(':');
                 if (pos == std::string::npos) break;
                 entry = entry.substr(pos + 1);
             }
-            
+
             // Get home directory (field 6)
             pos = entry.find(':');
             if (pos != std::string::npos) {
@@ -1386,10 +1347,10 @@ void WhoAmICommand::execute() {
                 return;
             }
         }
-        
+
         line = strtok(NULL, "\n");
     }
-    
+
     std::cerr << "smash error: whoami: user not found" << std::endl;
 }
 
