@@ -35,11 +35,7 @@ public:
 
     virtual void execute() = 0;
 
-    //virtual void prepare();
-    //virtual void cleanup();
-    /*string getPath();
-    void setPath(string path);*/
-    string getCommandS();
+    virtual string getCommandS();
     string printCommand();
     bool hasAlias();
     void setAlias(string command);
@@ -386,11 +382,12 @@ public:
 
 class ExternalCommand : public Command {
 public:
+    string full_cmd;
     ExternalCommand(char *cmd_line);
 
     virtual ~ExternalCommand() {
     }
-
+    string getCommandS() override;
     void execute() override;
 }; // DONE
 
