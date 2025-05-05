@@ -818,108 +818,116 @@ void ForegroundCommand::execute() {
     free_args(args, num_of_args);
 }
 
+/// helper functions for watchproc command
+
+static bool read_cpu_times(pid_t pid, long &utime, long &stime) {
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return false;
+    char buf[2048];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return false;
+    buf[n] = '\0';
+
+    // Skip pid
+    char *p = strchr(buf, ' ');
+    if (!p) return false;
+    // Skip comm (up to ") ")
+    p = strchr(p + 1, ')');
+    if (!p) return false;
+    p += 2;  // skip ") "
+    // Skip state (field 3)
+    p = strchr(p, ' ');
+    if (!p) return false;
+    // Skip fields 4–13
+    for (int i = 4; i <= 13; ++i) {
+        p = strchr(p + 1, ' ');
+        if (!p) return false;
+    }
+    // Field 14 = utime
+    utime = atol(p + 1);
+    // Skip utime
+    p = strchr(p + 1, ' ');
+    if (!p) return false;
+    // Field 15 = stime
+    stime = atol(p + 1);
+    return true;
+}
+
+static bool read_rss_kb(pid_t pid, long &rss_kb) {
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/%d/status", pid);
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return false;
+    char buf[4096];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return false;
+    buf[n] = '\0';
+
+    char *line = strtok(buf, "\n");
+    while (line) {
+        if (strncmp(line, "VmRSS:", 6) == 0) {
+            char *q = line + 6;
+            while (*q == ' ' || *q == '\t') ++q;
+            rss_kb = atol(q);
+            return true;
+        }
+        line = strtok(nullptr, "\n");
+    }
+    return false;
+}
+
 // Watchproc command
 WatchProcCommand::WatchProcCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void WatchProcCommand::execute() {
-    char** args = init_args();
-    int num_of_args = _parseCommandLine(this->cmd_line, args);
-    // Check whether malloc succeed
-    if(!args){
-        cerr << "smash failed: memory allocation error" << endl;
+    // parse args
+    char **args = init_args();
+    int num_args = _parseCommandLine(cmd_line, args);
+    if (!args) {
+        std::cerr << "smash error: watchproc: memory allocation\n";
+        return;
+    }
+    if (num_args != 2 || !is_legit_num(args[1])) {
+        std::cerr << "smash error: watchproc: invalid arguments\n";
+        free_args(args, num_args);
+        return;
+    }
+    pid_t pid = static_cast<pid_t>(atoi(args[1]));
+    free_args(args, num_args);
+
+    // first sample
+    long ut1, st1, rss1;
+    if (!read_cpu_times(pid, ut1, st1) || !read_rss_kb(pid, rss1)) {
+        std::cerr << "smash error: watchproc: pid " << pid << " does not exist or unreadable\n";
         return;
     }
 
-    // Check correctness of input
-    if(num_of_args > 2 || num_of_args == 1 || !is_legit_num(args[1])){
-        perror("smash error: watchproc: invalid arguments");
-        free_args(args, num_of_args);
+    // sleep 1 second
+    struct timespec req = {1, 0};
+    nanosleep(&req, nullptr);
+
+    // second sample
+    long ut2, st2, rss2;
+    if (!read_cpu_times(pid, ut2, st2) || !read_rss_kb(pid, rss2)) {
+        std::cerr << "smash error: watchproc: pid " << pid << " terminated\n";
         return;
     }
 
-    int pid = stoi(args[1]);
-    //ifstream memory_file("/proc/" + to_string(pid) + "/status");
+    // compute CPU% over 1 sec and memory in MB
+    long ticks = sysconf(_SC_CLK_TCK);
+    long delta_ticks = (ut2 + st2) - (ut1 + st1);
+    double cpu_percent = (delta_ticks / static_cast<double>(ticks)) * 100.0;
+    double mem_mb = rss2 / 1024.0;
 
-    string memory_path = ("/proc/" + to_string(pid) + "/status");
-    int memory_fd = open(memory_path.c_str(), O_RDONLY);
-
-    // Check whether pid exists
-    if(memory_fd == -1){
-        cout << "smash error: watchproc: pid " << pid << " does not exist" << endl;
-        free_args(args, num_of_args);
-        return;
-    }
-
-    char buffer[4096] = {0};
-    ssize_t bytes_read = read(memory_fd, buffer, sizeof(buffer) - 1);
-    close(memory_fd);
-
-    // Check whether read succeed
-    if(bytes_read <= 0) {
-        perror("smash error: read failed");
-        free_args(args, num_of_args);
-        return;
-    }
-
-    buffer[bytes_read] = '\0';
-
-    int memory_usage = 0;
-    char* line = strtok(buffer, "\n");
-    while(line){
-        if(strncmp(line, "VmRSS:", 6) == 0) {
-            char* value_start = line + 6;
-            // Skip whitespaces
-            while(*value_start == ' ' || *value_start == '\t') {
-                value_start++;
-            }
-            memory_usage = atoi(value_start);
-            break;
-        }
-        line = strtok(nullptr, "\n");
-    }
-
-    // CPU file
-    string cpu_path = "/proc/" + to_string(pid) + "/stat";
-    int cpu_fd = open(cpu_path.c_str(), O_RDONLY);
-
-    if(cpu_fd == -1){
-        perror("smash error: open failed");
-        free_args(args, num_of_args);
-        return;
-    }
-
-    memset(buffer, 0, sizeof(buffer));
-    bytes_read = read(cpu_fd, buffer, sizeof(buffer) - 1);
-    close(cpu_fd);
-
-    // Check whether read succeed
-    if(bytes_read <= -1) {
-        perror("smash error: read failed");
-        free_args(args, num_of_args);
-        return;
-    }
-
-    buffer[bytes_read] = '\0';
-
-    long utime = 0, stime = 0;
-    int field = 0;
-
-    // Retrieve CPU stats
-    char* cpu_line = strtok(buffer, " ");
-    while(cpu_line){
-        field++;
-        if(field == 14) {
-            utime = atol(cpu_line);
-        } else if (field == 15){
-            stime = atol(cpu_line);
-            break;
-        }
-    }
-
-    long ticks_per_sec = sysconf(_SC_CLK_TCK);
-    cout << "PID: " << pid << " | CPU Usage: "<< std::setprecision(2) << (utime + stime) / (double)ticks_per_sec
-         << "% | Memory Usage: " << std::setprecision(2) << (double)memory_usage / 1024 << " MB" << endl;
-    free_args(args, num_of_args);
+    // print with cout
+    std::cout << "PID: " << pid
+              << " | CPU Usage: " << std::fixed << std::setprecision(2) << cpu_percent << "%"
+              << " | Memory Usage: " << std::fixed << std::setprecision(2) << mem_mb << " MB"
+              << std::endl;
 } // Need to check calculation of CPU time
 
 // Kill command
