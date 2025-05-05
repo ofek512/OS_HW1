@@ -317,56 +317,40 @@ class DiskUsageCommand : public Command {
 private:
     std::unordered_set<ino_t> counted_inodes;
     long calculate_dir_size(const char* path) {
-        // First, count the directory itself
-        struct stat path_stat;
-        if (lstat(path, &path_stat) != 0) {
-            return 0;  // Can't stat the main path
+        struct stat st;
+        if (lstat(path, &st) != 0) {
+            return 0;  // can't stat this entry
         }
 
-        // Count this directory's blocks
-        long size = path_stat.st_blocks * 512;
-
-        // Add the directory to counted_inodes to avoid double-counting
-        counted_inodes.insert(path_stat.st_ino);
-
-        DIR* dir = opendir(path);
-        if (!dir) {
-            return size;  // Return the size we have so far if can't read dir contents
+        // Only count each inode once (prevents double-counting hard links)
+        if (counted_inodes.insert(st.st_ino).second == false) {
+            return 0;
         }
 
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != NULL) {
-            // Skip "." and ".." directories
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-                continue;
+        // Start with this entry's blocks
+        long size = st.st_blocks * 512;
+
+        // If it's a directory (and not a symlink) recurse into it
+        if (S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode)) {
+            DIR* dir = opendir(path);
+            if (!dir) {
+                return size;
             }
 
-            // Create full path for the entry
-            char full_path[PATH_MAX];
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-            // Use lstat instead of stat to not follow symlinks
-            struct stat file_stat;
-            if (lstat(full_path, &file_stat) == 0) {
-                // Only count each inode once (prevents double-counting hard links)
-                if (counted_inodes.find(file_stat.st_ino) == counted_inodes.end()) {
-                    counted_inodes.insert(file_stat.st_ino);
-
-                    // Use st_blocks which gives actual 512-byte blocks allocated
-                    size += file_stat.st_blocks * 512;
-
-                    // If entry is a directory (but not a symlink), recursively calculate its size
-                    if (S_ISDIR(file_stat.st_mode) && !S_ISLNK(file_stat.st_mode)) {
-                        long dir_size = calculate_dir_size(full_path);
-                        if (dir_size >= 0) {
-                            size += dir_size;
-                        }
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (strcmp(entry->d_name, ".") == 0 ||
+                    strcmp(entry->d_name, "..") == 0) {
+                    continue;
                     }
-                }
+
+                char child[PATH_MAX];
+                snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+                size += calculate_dir_size(child);
             }
+            closedir(dir);
         }
 
-        closedir(dir);
         return size;
     }
 

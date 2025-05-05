@@ -1265,7 +1265,8 @@ void DiskUsageCommand::execute() {
     // Convert to KB (1024 bytes = 1 KB)
     long kb_size = (size_in_bytes + 1023) / 1024; // Round up to nearest KB
 
-    std::cout << "Total disk usage: " << kb_size << " KB" << std::endl;
+    // Standard du format: just the size followed by the path
+    cout << "Total disk usage: " << kb_size << std::endl;
 }
 
 WhoAmICommand::WhoAmICommand( char *cmd_line) : Command(cmd_line) {
