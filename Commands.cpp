@@ -146,6 +146,10 @@ string Command::getCommandS() {
     return cmd_line;
 }
 
+string ExternalCommand::getCommandS() {
+    return full_cmd;
+}
+
 
 string SmallShell::getPrompt() const {
     return prompt;
@@ -314,7 +318,7 @@ void JobsList::printJobsList() {
 
 bool isFinished(JobsList::JobEntry* job)
 {
-    if(job == nullptr)
+    if(job == nullptr || job->cmd == NULL)
     {
         return true;
     }
@@ -344,7 +348,19 @@ bool isFinished(JobsList::JobEntry* job)
 }
 
 void JobsList::removeFinishedJobs() {
-    jobsList.remove_if(isFinished);
+    for (auto it = jobsList.begin(); it != jobsList.end(); ) {
+        if (isFinished(*it) && (*it)->cmd != NULL) {
+            job_map.erase((*it)->jobId);
+            auto temp_it = it;
+            it = jobsList.erase(it);  // erase returns the next valid iterator
+            if (max_id == (*temp_it)->jobId) {
+                jobsList.sort();
+                max_id = jobsList.empty() ? -1 : jobsList.back()->jobId;
+            }
+        } else {
+            ++it;
+        }
+    }
 }
 
 void JobsList::printJobsBeforeQuit()
@@ -417,8 +433,8 @@ bool JobsList::JobEntry::operator<(const JobsList::JobEntry &other) const{
 }
 
 JobsList::JobEntry* JobsList::getJobById(int jobId) {
+    removeFinishedJobs();
     if(job_map.find(jobId) == job_map.end()){
-        cerr << "getJobById error: no job with jobId = " << jobId << endl;
         return nullptr;
     }
     return job_map[jobId];
@@ -454,7 +470,7 @@ bool SmallShell::validCommand(string name) {
 //todo important to add this to constructor of smallshell
 void SmallShell::createCommandVector() {
     commands = {"chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
-                "kill", "unalias", "alias", "unsetenv", "watchproc"};
+                "kill", "unalias", "alias", "unsetenv", "watchproc", "du", "netinfo"};
 }
 
 
@@ -523,9 +539,6 @@ void ChpromptCommand::execute()
         newSmashPrompt="smash";
     }
     SmallShell::getInstance().setPrompt(newSmashPrompt);
-
-    // Add this line for debugging
-    std::cout << "Prompt changed to: " << newSmashPrompt << std::endl;
 }
 
 /* ShowPid command */
@@ -742,6 +755,7 @@ void JobsCommand::execute() {
 ForegroundCommand::ForegroundCommand( char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void ForegroundCommand::execute() {
+    SmallShell::getInstance().getJobs()->removeFinishedJobs();
     char** args = init_args();
 
     if(!args){
@@ -1006,6 +1020,7 @@ ExternalCommand::ExternalCommand(char *cmd_line) : Command(cmd_line) {
     std::string clean_cmd_line = cmd_line;
     //todo check this
     if (backGround) {
+        full_cmd = string(cmd_line);
         _removeBackgroundSign(cmd_line);
         // Create a modifiable copy of the command line
         char* cmd_copy = strdup(cmd_line);
