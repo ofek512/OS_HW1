@@ -11,17 +11,17 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
+// #include <sys/ioctl.h>
 #include <netinet/in.h>
-#include <net/if.h>
-#include <arpa/inet.h>
-#include <ifaddrs.h>
-#include <dirent.h>
+// #include <net/if.h>
+// #include <arpa/inet.h>
+// #include <ifaddrs.h>
+// #include <dirent.h>
 
 
 
@@ -560,7 +560,7 @@ void ChangeDirCommand::execute() {
         // We can don't check due to the assumption that malloc doesn't fail?
     }
     if(num_of_args > 2){
-        cout << "smash error: cd: too many arguments" << endl;
+        cerr << "smash error: cd: too many arguments" << endl;
     } else if(num_of_args == 1){
     } else {
         string path = args[1];
@@ -568,11 +568,11 @@ void ChangeDirCommand::execute() {
 
         if(path == "-"){
             if(!(*plastPwd)){
-                cout << "smash error: cd: OLDPWD not set" << endl;
+                cerr << "smash error: cd: OLDPWD not set" << endl;
                 free(current_path);
             } else {
                 if(chdir(*plastPwd) == -1){
-                    cout << "smash error: cd: chdir failure" << endl;
+                    perror("smash error: cd: chdir failure");
                     free(current_path);
                     return;
                 } else {
@@ -581,7 +581,7 @@ void ChangeDirCommand::execute() {
             }
         } else {
             if(chdir(args[1]) == -1){
-                cout << "smash error: cd: chdir failure" << endl;
+                perror("smash error: cd: chdir failure");
                 free(current_path);
             } else {
                 *plastPwd = current_path; //should free previous path?
@@ -623,23 +623,23 @@ void AliasCommand::execute() {
     bool matched = std::regex_search(fullCommand, matches, aliasPattern);
 
     if (!matched) {
-        cout << "smash error: alias: invalid alias format" << std::endl;
+        cerr << "smash error: alias: invalid alias format" << std::endl;
         return;
     }
 
     // Extract alias name and command from regex matches
-    std::string aliasName = matches[1];
-    std::string aliasCommand = matches[2];
+    string aliasName = matches[1];
+    string aliasCommand = matches[2];
 
     // Check if alias already exists
     if (SmallShell::getInstance().getAlias(aliasName).compare("") != 0) {
-        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
     // Check if alias name is a reserved command
     if (SmallShell::getInstance().validCommand(aliasName)) {
-        cout << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
+        cerr << "smash error: alias: " << aliasName << " already exists or is a reserved command" << std::endl;
         return;
     }
 
@@ -662,7 +662,7 @@ void UnAliasCommand::execute() {
 
     // Check validity of arguments
     if(num_of_args == 1) {
-        cout << "smash error: unalias: not enough arguments" << endl;
+        cerr << "smash error: unalias: not enough arguments" << endl;
         free_args(args, num_of_args);
         return;
     }
@@ -672,7 +672,7 @@ void UnAliasCommand::execute() {
 
         // Check whether alias exist
         if(!SmallShell::getInstance().removeAlias(current_alias)){
-            cout << "smash error: unalias: " << current_alias << " alias does not exist" << endl;
+            cerr << "smash error: unalias: " << current_alias << " alias does not exist" << endl;
             free_args(args, num_of_args);
             return;
         }
@@ -712,37 +712,44 @@ char* SmallShell::getCurrWorkingDir()  const{
 // Jobs command
 JobsCommand::JobsCommand( char* cmd_line): BuiltInCommand(cmd_line){}
 
-// unsetenv command
-UnSetEnvCommand::UnSetEnvCommand( char *cmd_line): BuiltInCommand(cmd_line){}
-
+// Unsetenv command
+UnSetEnvCommand::UnSetEnvCommand(char *cmd_line)
+    : BuiltInCommand(cmd_line) { }
 
 void UnSetEnvCommand::execute() {
-    extern char **environ;  // Access the global environment array directly
+    extern char **environ;
 
+    // If no variable names were provided → error
     if (cmd_segments.size() < 2) {
-        cout << "smash error: unsetenv: not enough arguments" << endl;
+        cerr << "smash error: unsetenv: not enough arguments" << endl;
         return;
     }
 
-    for (size_t i = 1; i < cmd_segments.size(); i++) {
-        string var_name = cmd_segments[i];
-        string var_prefix = var_name + "=";
-        bool found = false;
+    // Iterate over each requested variable
+    for (size_t i = 1; i < cmd_segments.size(); ++i) {
+        const string &var = cmd_segments[i];
+        const string prefix = var + "=";
+        int idx = 0;
 
-        // Find the index of the environment variable
-        for (int j = 0; environ[j] != nullptr; j++) {
-            // Check if this entry starts with our variable name followed by '='
-            if (strncmp(environ[j], var_prefix.c_str(), var_prefix.length()) == 0) {
-                found = true;
-
-                // Shift all subsequent elements (including NULL) one position back
-                for (int k = j; environ[k] != nullptr; k++) {
-                    environ[k] = environ[k + 1];
-                }
-
-                break;  // Variable found and removed
+        // Search for an entry in environ that begins with "VAR="
+        while (environ[idx] != nullptr) {
+            if (strncmp(environ[idx], prefix.c_str(), prefix.size()) == 0) {
+                break;  // found at environ[idx]
             }
+            ++idx;
         }
+
+        // If we reached the end without finding it → error and stop
+        if (environ[idx] == nullptr) {
+            cerr << "smash error: unsetenv: " << var << " does not exist" << endl;
+            return;
+        }
+
+        // Shift all subsequent entries one slot back to remove environ[idx]
+        do {
+            environ[idx] = environ[idx + 1];
+            ++idx;
+        } while (environ[idx] != nullptr);
     }
 }
 
@@ -969,7 +976,7 @@ void KillCommand::execute() {
 
     // Check validity of jobid
     if(!is_legit_num(args[2])) {
-        cout << "smash error: kill: invalid arguments" << endl;
+        cerr << "smash error: kill: invalid arguments" << endl;
         free_args(args, num_of_args);
         return;
     }
@@ -979,7 +986,7 @@ void KillCommand::execute() {
 
     // Check whether job exists
     if(!job_to_kill) {
-        cout << "smash error: kill: job-id " << job_id << " does not exist" << endl;
+        cerr << "smash error: kill: job-id " << job_id << " does not exist" << endl;
         free_args(args, num_of_args);
         return;
     }
@@ -1254,7 +1261,7 @@ DiskUsageCommand::DiskUsageCommand( char *cmd_line) : Command(cmd_line) {
 void DiskUsageCommand::execute() {
     // Check number of arguments
     if (cmd_segments.size() > 2) {
-        std::cout << "smash error: du: too many arguments" << std::endl;
+        std::cerr << "smash error: du: too many arguments" << std::endl;
         return;
     }
 
@@ -1270,7 +1277,7 @@ void DiskUsageCommand::execute() {
     // Check if directory exists
     DIR* dir = opendir(dir_path);
     if (dir == NULL) {
-        std::cout << "smash error: du: directory " << dir_path << " does not exist" << std::endl;
+        std::cerr << "smash error: du: directory " << dir_path << " does not exist" << std::endl;
         return;
     }
     closedir(dir);
@@ -1281,7 +1288,7 @@ void DiskUsageCommand::execute() {
     // Calculate total size
     long size_in_bytes = calculate_dir_size(dir_path);
     if (size_in_bytes < 0) {
-        std::cout << "smash error: du: failed to calculate disk usage" << std::endl;
+        std::cerr << "smash error: du: failed to calculate disk usage" << std::endl;
         return;
     }
 
