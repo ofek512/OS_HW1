@@ -16,12 +16,12 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-// #include <sys/ioctl.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
-// #include <net/if.h>
-// #include <arpa/inet.h>
-// #include <ifaddrs.h>
-// #include <dirent.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <dirent.h>
+#include <net/if.h>
 
 
 
@@ -142,6 +142,12 @@ bool extract_signal_number(char* input, int& signum){
     return true;
 }
 
+int get_ip_and_subnet(const char* interface, string to_fill[]);
+
+int get_default_gateway(string to_fill[]);
+
+int get_DNS_servers(vector<string>& dns_servers);
+
 string Command::getCommandS() {
     return cmd_line;
 }
@@ -192,13 +198,6 @@ Command *SmallShell::CreateCommand(char* cmd_line) {
         return new PipeCommand(cmd_line, PipeCommand::STDERR);
     }
 
-    // Redirection command
-    if(strstr(cmd_line, ">>")) {
-        return new RedirectionCommand(cmd_line,RedirectionCommand::CONCAT);
-    } else if(strstr(cmd_line, ">")) {
-        return new RedirectionCommand(cmd_line, RedirectionCommand::TRUNCATE);
-    }
-
     // Complex external command
     if(strstr(cmd_line, "*") || strstr(cmd_line, "?")) {
         return new ComplexExternalCommand(cmd_line);
@@ -238,9 +237,16 @@ Command *SmallShell::CreateCommand(char* cmd_line) {
     } else if (firstWord == "whoami") {
         return new WhoAmICommand(cmd_line);
     } else if (firstWord =="netinfo") {
-        return nullptr;
-        //return new NetInfo(cmd_line);
+        return new NetInfo(cmd_line);
     }
+
+    // Redirection command
+    if(strstr(cmd_line, ">>")) {
+        return new RedirectionCommand(cmd_line,RedirectionCommand::CONCAT);
+    } else if(strstr(cmd_line, ">")) {
+        return new RedirectionCommand(cmd_line, RedirectionCommand::TRUNCATE);
+    }
+
     //if nothing else is matched, we treat as external command.
     return new ExternalCommand(cmd_line);
     //meow
@@ -1529,327 +1535,133 @@ PipeCommand::~PipeCommand() {
     free(command2);
 }
 
-/*
-NetInfo::NetInfo(const char *cmd_line) : Command(cmd_line) {
-    createSegments(cmd_line, cmd_segments);
-}
-*/
+// NetInfo command
+NetInfo::NetInfo(char *cmd_line) : Command(cmd_line) {}
 
-// void NetInfo::execute() {
-//     // Check if interface is specified
-//     if (cmd_segments.size() < 2) {
-//         std::cout << "smash error: netinfo: interface not specified" << std::endl;
-//         return;
-//     }
-//
-//     string interface = cmd_segments[1];
-//
-//     // Check if interface exists
-//     struct ifaddrs *ifaddr, *ifa;
-//     bool interface_exists = false;
-//
-//     if (getifaddrs(&ifaddr) == -1) {
-//         perror("smash error: getifaddrs failed");
-//         return;
-//     }
-//
-//     // IP address and subnet mask
-//     string ip_address, subnet_mask;
-//     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-//         if (ifa->ifa_addr == NULL) {
-//             continue;
-//         }
-//
-//         if (strcmp(ifa->ifa_name, interface.c_str()) == 0) {
-//             interface_exists = true;
-//
-//             if (ifa->ifa_addr->sa_family == AF_INET) {
-//                 // Get IP address
-//                 char ip[INET_ADDRSTRLEN];
-//                 inet_ntop(AF_INET, &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr, ip, INET_ADDRSTRLEN);
-//                 ip_address = ip;
-//
-//                 // Get subnet mask
-//                 char mask[INET_ADDRSTRLEN];
-//                 inet_ntop(AF_INET, &((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr, mask, INET_ADDRSTRLEN);
-//                 subnet_mask = mask;
-//                 break;
-//             }
-//         }
-//     }
-//
-//     if (!interface_exists) {
-//         cout << "smash error: netinfo: interface " << interface << " does not exist" << endl;
-//         freeifaddrs(ifaddr);
-//         return;
-//     }
-//
-//     // Get default gateway
-//     string default_gateway;
-//     ifstream route_file("/proc/net/route");
-//     if (route_file.is_open()) {
-//         string line;
-//         // Skip header line
-//         getline(route_file, line);
-//
-//         while (getline(route_file, line)) {
-//             istringstream iss(line);
-//             string if_name, dest, gateway;
-//             iss >> if_name >> dest >> gateway;
-//
-//             if (if_name == interface && dest == "00000000") {
-//                 // Convert hex to IP format
-//                 unsigned int gw;
-//                 std::stringstream ss;
-//                 ss << std::hex << gateway;
-//                 ss >> gw;
-//
-//                 // Convert to network byte order and then to readable IP
-//                 struct in_addr addr;
-//                 addr.s_addr = gw;
-//                 default_gateway = inet_ntoa(addr);
-//                 break;
-//             }
-//         }
-//         route_file.close();
-//     }
-//
-//     // Get DNS servers
-//     vector<string> dns_servers;
-//     ifstream resolv_file("/etc/resolv.conf");
-//     if (resolv_file.is_open()) {
-//         string line;
-//         while (getline(resolv_file, line)) {
-//             if (line.substr(0, 10) == "nameserver") {
-//                 istringstream iss(line);
-//                 string keyword, dns;
-//                 iss >> keyword >> dns;
-//                 dns_servers.push_back(dns);
-//             }
-//         }
-//         resolv_file.close();
-//     }
-//
-//     // Display information
-//     cout << "IP Address: " << ip_address << endl;
-//     cout << "Subnet Mask: " << subnet_mask << endl;
-//     cout << "Default Gateway: " << default_gateway << endl;
-//
-//     cout << "DNS Servers: ";
-//     for (size_t i = 0; i < dns_servers.size(); i++) {
-//         cout << dns_servers[i];
-//         if (i < dns_servers.size() - 1) {
-//             cout << ", ";
-//         }
-//     }
-//     cout << endl;
-//
-//     freeifaddrs(ifaddr);
-// }
-
-std::vector<std::string> getAvailableInterfaces() {
-    std::vector<std::string> interfaces;
-
-    // Method 1: Using /sys/class/net directory
-    DIR* dir = opendir("/sys/class/net");
-    if (dir != NULL) {
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != NULL) {
-            if (entry->d_name[0] != '.') { // Skip . and ..
-                interfaces.push_back(entry->d_name);
-            }
-        }
-        closedir(dir);
-    }
-
-    return interfaces;
-}
-
-std::string getPrimaryInterface() {
-    // Look for common interfaces in order of preference
-    std::vector<std::string> interfaces = getAvailableInterfaces();
-
-    // First, look for ethernet interfaces
-    for (const auto& iface : interfaces) {
-        if (iface.substr(0, 2) == "en" || iface.substr(0, 3) == "eth") {
-            return iface;
-        }
-    }
-
-    // Then wireless interfaces
-    for (const auto& iface : interfaces) {
-        if (iface.substr(0, 2) == "wl" || iface.substr(0, 4) == "wlan") {
-            return iface;
-        }
-    }
-
-    // If nothing else, return first non-loopback interface
-    for (const auto& iface : interfaces) {
-        if (iface != "lo") {
-            return iface;
-        }
-    }
-
-    // Default to loopback if nothing else available
-    return "lo";
-}
-
-/*
 void NetInfo::execute() {
-    // Check if interface is specified
-    if (cmd_segments.size() < 2) {
-        std::cout << "smash error: netinfo: interface not specified" << std::endl;
-        std::cout << "Available interfaces: ";
-
-        std::vector<std::string> interfaces = getAvailableInterfaces();
-        for (size_t i = 0; i < interfaces.size(); ++i) {
-            std::cout << interfaces[i];
-            if (i < interfaces.size() - 1) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << std::endl;
+    char** args = init_args();
+    int num_args = _parseCommandLine(cmd_line, args);
+    if(!args) {
+        cerr << "smash error: watchproc: malloc failed" << endl;
         return;
     }
-
-    std::string interface = cmd_segments[1];
-    std::string original_interface = interface;
-
-    // Special case: if eth0 is specified but doesn't exist, map to primary interface
-    bool using_eth0_mapping = false;
-    if (interface == "eth0") {
-        // Check if eth0 actually exists
-        bool eth0_exists = false;
-        std::vector<std::string> interfaces = getAvailableInterfaces();
-        for (const auto& iface : interfaces) {
-            if (iface == "eth0") {
-                eth0_exists = true;
-                break;
-            }
-        }
-
-        if (!eth0_exists) {
-            interface = getPrimaryInterface();
-            using_eth0_mapping = true;
-        }
-    }
-
-    // Check if interface exists
-    struct ifaddrs *ifaddr, *ifa;
-    bool interface_exists = false;
-
-    if (getifaddrs(&ifaddr) == -1) {
-        perror("smash error: getifaddrs failed");
+    if(num_args == 1) {
+        cerr << "smash error: netinfo: interface not specified" << endl;
+        free_args(args, num_args);
         return;
     }
-
-    // IP address and subnet mask
-    std::string ip_address, subnet_mask;
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL) {
-            continue;
-        }
-
-        if (strcmp(ifa->ifa_name, interface.c_str()) == 0) {
-            interface_exists = true;
-
-            if (ifa->ifa_addr->sa_family == AF_INET) {
-                // Get IP address
-                char ip[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr, ip, INET_ADDRSTRLEN);
-                ip_address = ip;
-
-                // Get subnet mask
-                char mask[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr, mask, INET_ADDRSTRLEN);
-                subnet_mask = mask;
-                break;
-            }
-        }
-    }
-
-    if (!interface_exists) {
-        std::cout << "smash error: netinfo: interface " << original_interface << " does not exist" << std::endl;
-        std::cout << "Available interfaces: ";
-
-        std::vector<std::string> interfaces = getAvailableInterfaces();
-        for (size_t i = 0; i < interfaces.size(); ++i) {
-            std::cout << interfaces[i];
-            if (i < interfaces.size() - 1) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << std::endl;
-
-        freeifaddrs(ifaddr);
+    string interface_info[3];
+    char* interface = args[1];
+    // Check if interface exists, and obtain ip and subnet
+    if(get_ip_and_subnet(interface, interface_info) == -1) {
+        cerr << "smash error: netinfo: interface " << interface << " does not exists" << endl;
+        free_args(args, num_args);
         return;
     }
+    get_default_gateway(interface_info);
+    vector<string> dns_servers;
+    get_DNS_servers(dns_servers);
 
-    // Get default gateway
-    std::string default_gateway;
-    std::ifstream route_file("/proc/net/route");
-    if (route_file.is_open()) {
-        std::string line;
-        // Skip header line
-        std::getline(route_file, line);
+    // Print info
+    cout << "IP Address: " << interface_info[0] << endl;
+    cout << "Subnet Mask: " << interface_info[1] << endl;
+    cout << "Default Gateway: " << interface_info[2] << endl;
+    cout << "DNS Servers: ";
+    for(int i = 0; i < dns_servers.size() - 1; i++){
+        cout << dns_servers[i] << ", ";
+    }
+    cout << dns_servers[dns_servers.size() - 1] << endl;
+}
 
-        while (std::getline(route_file, line)) {
-            std::istringstream iss(line);
-            std::string if_name, dest, gateway;
-            iss >> if_name >> dest >> gateway;
+int get_ip_and_subnet(const char* interface, string to_fill[]) {
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        //perror("smash error: NetInfo: socket creation failed");
+        return -1;
+    }
 
-            if (if_name == interface && dest == "00000000") {
-                // Convert hex to IP format
-                unsigned int gw;
-                std::stringstream ss;
-                ss << std::hex << gateway;
-                ss >> gw;
+    // Set the name to the given
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+    // Obtain IP address
+    if(ioctl(sock, SIOCGIFADDR, &ifr) == -1) {
+        //perror("smash error: NetInfo: ioctl failed");
+        return -1;
+    }
+    struct sockaddr_in* ipaddr = (struct sockaddr_in*)&ifr.ifr_addr;
+    to_fill[0] = inet_ntoa(ipaddr->sin_addr);
 
-                // Convert to network byte order and then to readable IP
+    // Obtain subnet mask
+    if(ioctl(sock, SIOCGIFNETMASK, &ifr) == -1) {
+        //perror("smash error: NetInfo: ioctl failed");
+        return -1;
+    }
+    struct sockaddr_in* netmask = (struct sockaddr_in*)&ifr.ifr_addr;
+    to_fill[1] = inet_ntoa(netmask->sin_addr);
+    close(sock);
+    return 0;
+}
+
+int get_default_gateway(string to_fill[]) {
+    int fd = open("/proc/net/route", O_RDONLY);
+    if(fd < 0) {
+        perror("smash error: open failed");
+        return -1;
+    }
+    // Read from the file to the buffer
+    char buffer[4096];
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    if(bytes_read <= 0) {
+        perror("smash error: read failed");
+        close(fd);
+        return -1;
+    }
+    buffer[bytes_read] = '\0';
+
+    //Split the buffer into lines
+    char* line = strtok(buffer, "\n");
+    while(line) {
+        char iface[16], destination[16], gateway[16];
+
+        if(sscanf(line, "%15s %15s %15s", iface, destination, gateway) == 3) {
+            if (strcmp(destination, "00000000") == 0) {
+                unsigned long gw = strtoul(gateway, nullptr, 16);
                 struct in_addr addr;
                 addr.s_addr = gw;
-                default_gateway = inet_ntoa(addr);
-                break;
+                to_fill[2] = inet_ntoa(addr);
             }
         }
-        route_file.close();
+        line = strtok(nullptr, "\n");
     }
-
-    // Get DNS servers
-    std::vector<std::string> dns_servers;
-    std::ifstream resolv_file("/etc/resolv.conf");
-    if (resolv_file.is_open()) {
-        std::string line;
-        while (std::getline(resolv_file, line)) {
-            if (line.substr(0, 10) == "nameserver") {
-                std::istringstream iss(line);
-                std::string keyword, dns;
-                iss >> keyword >> dns;
-                dns_servers.push_back(dns);
-            }
-        }
-        resolv_file.close();
-    }
-
-    // If using eth0 mapping, let user know
-    if (using_eth0_mapping) {
-        std::cout << "Note: eth0 not found, using " << interface << " instead." << std::endl;
-    }
-
-    // Display information
-    std::cout << "IP Address: " << ip_address << std::endl;
-    std::cout << "Subnet Mask: " << subnet_mask << std::endl;
-    std::cout << "Default Gateway: " << default_gateway << std::endl;
-
-    std::cout << "DNS Servers: ";
-    for (size_t i = 0; i < dns_servers.size(); i++) {
-        std::cout << dns_servers[i];
-        if (i < dns_servers.size() - 1) {
-            std::cout << ", ";
-        }
-    }
-    std::cout << std::endl;
-
-    freeifaddrs(ifaddr);
+    close(fd);
+    return 0;
 }
-*/
+
+int get_DNS_servers(vector<string>& dns_servers) {
+    int fd = open("/etc/resolv.conf", O_RDONLY);
+    if(fd < 0) {
+        perror("smash error: open failed");
+        return -1;
+    }
+
+    // Read from the file to the buffer
+    char buffer[4096];
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    if(bytes_read <= 0) {
+        perror("smash error: read failed");
+        close(fd);
+        return -1;
+    }
+    buffer[bytes_read] = '\0';
+
+    char* line = strtok(buffer, "\n");
+    while(line) {
+        if(strncmp(line, "nameserver", 10) == 0 && (line[10] == ' ' || line[10] == '\t')) {
+            dns_servers.emplace_back(line + 11);
+        }
+        line = strtok(nullptr, "\n");
+    }
+    close(fd);
+    return 0;
+}
