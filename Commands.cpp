@@ -11,7 +11,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-// #include <stdlib.h>
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/types.h>
@@ -19,11 +18,7 @@
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <ifaddrs.h>
-#include <dirent.h>
 #include <net/if.h>
-
-
 
 using namespace std;
 
@@ -43,12 +38,6 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 
-#define DO_SYS(syscall) do{                                         \
-if ((syscall) == -1) {                                              \
-    string buf = "smash failed: " + string(#syscall) + " failed";   \
-    perror(buf.c_str());                                            \
-    }                                                               \
-} while(0)
 
 string _ltrim(const std::string &s) {
     size_t start = s.find_first_not_of(WHITESPACE);
