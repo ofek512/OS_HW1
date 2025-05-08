@@ -6,7 +6,7 @@
 using namespace std;
 
 void ctrlCHandler(int sig_num) {
-    cout << "smash: got ctrl-C" << endl;
+    cout << " smash: got ctrl-C" << endl;
 
     SmallShell& smash = SmallShell::getInstance();
 
