@@ -816,7 +816,7 @@ void UnAliasCommand::execute()
     // Check whether malloc succeed
     if (!args)
     {
-        cout << "smash error: malloc failed" << endl;
+        cerr << "smash error: malloc failed" << endl;
         return;
     }
 
@@ -944,7 +944,7 @@ void ForegroundCommand::execute()
 
     if (!args)
     {
-        cerr << "Malloc failed" << endl;
+        cerr << "smash error: malloc failed" << endl;
         return;
     }
 
@@ -1175,7 +1175,7 @@ void WatchProcCommand::execute()
 
     // print with cout
     std::cout << "PID: " << pid
-              << " | CPU Usage: " << std::fixed << std::setprecision(2) << cpu_percent << "%"
+              << " | CPU Usage: " << std::fixed << std::setprecision(1) << cpu_percent << "%"
               << " | Memory Usage: " << std::fixed << std::setprecision(2) << mem_mb << " MB"
               << std::endl;
 } // Need to check calculation of CPU time
@@ -1228,7 +1228,7 @@ void KillCommand::execute()
     // Check whether signum is valid
     if (!extract_signal_number(args[1], signum))
     {
-        cout << "smash error: kill: invalid arguments" << endl;
+        cerr << "smash error: kill: invalid arguments" << endl;
         free_args(args, num_of_args);
         return;
     }
@@ -1865,7 +1865,7 @@ void NetInfo::execute()
     int num_args = _parseCommandLine(cmd_line, args);
     if (!args)
     {
-        cerr << "smash error: watchproc: malloc failed" << endl;
+        cerr << "smash error: netinfo: malloc failed" << endl;
         return;
     }
     if (num_args == 1)
@@ -1879,7 +1879,7 @@ void NetInfo::execute()
     // Check if interface exists, and obtain ip and subnet
     if (get_ip_and_subnet(interface, interface_info) == -1)
     {
-        cerr << "smash error: netinfo: interface " << interface << " does not exists" << endl;
+        cerr << "smash error: netinfo: interface " << interface << " does not exist" << endl;
         free_args(args, num_args);
         return;
     }
