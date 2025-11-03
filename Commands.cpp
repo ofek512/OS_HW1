@@ -1176,7 +1176,7 @@ void WatchProcCommand::execute()
     // print with cout
     std::cout << "PID: " << pid
               << " | CPU Usage: " << std::fixed << std::setprecision(1) << cpu_percent << "%"
-              << " | Memory Usage: " << std::fixed << std::setprecision(2) << mem_mb << " MB"
+              << " | Memory Usage: " << std::fixed << std::setprecision(1) << mem_mb << " MB"
               << std::endl;
 } // Need to check calculation of CPU time
 
@@ -1584,7 +1584,7 @@ void DiskUsageCommand::execute()
     long kb_size = (size_in_bytes + 1023) / 1024; // Round up to nearest KB
 
     // Standard du format: just the size followed by the path
-    cout << "Total disk usage: " << kb_size << std::endl;
+    cout << "Total disk usage: " << kb_size << " KB" << std::endl;
 }
 
 WhoAmICommand::WhoAmICommand(char *cmd_line) : Command(cmd_line)
@@ -1756,7 +1756,7 @@ void PipeCommand::execute()
         {
             perror("smash error: setpgrp failed");
             close_pipe(fd);
-            return;
+            exit(1);
         }
         // Redirect output
         if (command_type == STDOUT)
@@ -1765,7 +1765,7 @@ void PipeCommand::execute()
             {
                 perror("smash error: dup2 failed");
                 close_pipe(fd);
-                return;
+                exit(1);
             }
         }
         else
@@ -1774,11 +1774,11 @@ void PipeCommand::execute()
             {
                 perror("smash error: dup2 failed");
                 close_pipe(fd);
-                return;
+                exit(1);
             }
         }
         if (!close_pipe(fd))
-            return;
+            exit(1);
         SmallShell::getInstance().executeCommand(command1);
         exit(1);
     }
@@ -1799,7 +1799,7 @@ void PipeCommand::execute()
         {
             perror("smash error: setpgrp failed");
             close_pipe(fd);
-            return;
+            exit(1);
         }
 
         // Redirect input
@@ -1807,10 +1807,10 @@ void PipeCommand::execute()
         {
             perror("smash error: dup2 failed");
             close_pipe(fd);
-            return;
+            exit(1);
         }
         if (!close_pipe(fd))
-            return;
+            exit(1);
         SmallShell::getInstance().executeCommand(command2);
         exit(1);
     }
