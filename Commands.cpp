@@ -547,7 +547,7 @@ JobsList *SmallShell::getJobs()
 
 void SmallShell::getAllAlias(vector<string> &aliases)
 {
-    for (auto element : sortedAlias)
+    for (auto element : aliasCreationOrder)
     {
         aliases.push_back(element + "='" + aliasMap[element] + "'");
     }
@@ -587,9 +587,7 @@ void SmallShell::createCommandVector()
 void SmallShell::setAlias(string name, string command)
 {
     aliasMap[name] = command;
-    sortedAlias.push_back(name);
-    // Keep the vector sorted alphabetically
-    sort(sortedAlias.begin(), sortedAlias.end());
+    aliasCreationOrder.push_back(name);
 }
 
 bool SmallShell::removeAlias(string name)
@@ -603,7 +601,8 @@ bool SmallShell::removeAlias(string name)
 
     // Erase from map and vector
     aliasMap.erase(name);
-    sortedAlias.erase(find(sortedAlias.begin(), sortedAlias.end(), name));
+
+    aliasCreationOrder.erase(find(aliasCreationOrder.begin(), aliasCreationOrder.end(), name));
 
     return true;
 }
@@ -759,7 +758,7 @@ void AliasCommand::execute()
     fullCommand = _trim(fullCommand);
 
     // Keep the ^ anchor but make the pattern more flexible for internal spacing
-    static const std::regex aliasPattern("^alias\\s+([a-zA-Z0-9_]+)\\s*=\\s*'([^']*)'$");
+    static const std::regex aliasPattern("^alias [a-zA-Z0-9_]+='[^']*'$");
 
     std::smatch matches;
     bool matched = std::regex_search(fullCommand, matches, aliasPattern);
