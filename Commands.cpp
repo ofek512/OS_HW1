@@ -867,13 +867,10 @@ char *SmallShell::getCurrWorkingDir() const
 JobsCommand::JobsCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
 
 // Unsetenv command
-UnSetEnvCommand::UnSetEnvCommand(char *cmd_line)
-    : BuiltInCommand(cmd_line) {}
+UnSetEnvCommand::UnSetEnvCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
 
 void UnSetEnvCommand::execute()
 {
-    extern char **environ;
-
     // If no variable names were provided → error
     if (cmd_segments.size() < 2)
     {
@@ -881,39 +878,81 @@ void UnSetEnvCommand::execute()
         return;
     }
 
-    // Iterate over each requested variable
+    // --- New logic: Check existence by reading /proc ---
+    char proc_path[256];
+    snprintf(proc_path, sizeof(proc_path), "/proc/%d/environ", getpid());
+
+    int fd = open(proc_path, O_RDONLY);
+    if (fd < 0)
+    {
+        perror("smash error: open failed");
+        return;
+    }
+
+    char buffer[4096]; // Assuming 4KB is enough for env vars
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+
+    if (bytes_read <= 0)
+    {
+        // This case should be rare, but handle it
+        perror("smash error: read failed");
+        return;
+    }
+    buffer[bytes_read] = '\0'; // Ensure null termination
+
+    // Check each requested var
+    for (size_t i = 1; i < cmd_segments.size(); ++i)
+    {
+        const string &var = cmd_segments[i];
+        const string prefix = var + "=";
+        bool found = false;
+
+        // Iterate through the NUL-separated buffer
+        char *p = buffer;
+        while (p < buffer + bytes_read)
+        {
+            if (strncmp(p, prefix.c_str(), prefix.size()) == 0)
+            {
+                found = true;
+                break;
+            }
+            p += strlen(p) + 1; // Move to the next string
+        }
+
+        if (!found)
+        {
+            cerr << "smash error: unsetenv: " << var << " does not exist" << endl;
+            return; // Stop at the first invalid occurrence
+        }
+    }
+
+    // --- Old logic: Remove variables (this part is OK) ---
+    extern char **environ;
     for (size_t i = 1; i < cmd_segments.size(); ++i)
     {
         const string &var = cmd_segments[i];
         const string prefix = var + "=";
         int idx = 0;
 
-        // Search for an entry in environ that begins with "VAR="
         while (environ[idx] != nullptr)
         {
             if (strncmp(environ[idx], prefix.c_str(), prefix.size()) == 0)
             {
-                break; // found at environ[idx]
+                // Found at environ[idx], shift all subsequent entries
+                int shift_idx = idx;
+                do
+                {
+                    environ[shift_idx] = environ[shift_idx + 1];
+                    ++shift_idx;
+                } while (environ[shift_idx] != nullptr);
+
+                break; // Move to the next variable
             }
             ++idx;
         }
-
-        // If we reached the end without finding it → error and stop
-        if (environ[idx] == nullptr)
-        {
-            cerr << "smash error: unsetenv: " << var << " does not exist" << endl;
-            return;
-        }
-
-        // Shift all subsequent entries one slot back to remove environ[idx]
-        do
-        {
-            environ[idx] = environ[idx + 1];
-            ++idx;
-        } while (environ[idx] != nullptr);
     }
 }
-
 // Jobs command
 void JobsCommand::execute()
 {
