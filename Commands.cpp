@@ -292,10 +292,6 @@ Command *SmallShell::CreateCommand(char *cmd_line)
     {
         return new UnSetEnvCommand(cmd_line);
     }
-    else if (firstWord == "watchproc")
-    {
-        return new WatchProcCommand(cmd_line);
-    }
     else if (firstWord == "kill")
     {
         return new KillCommand(cmd_line);
@@ -311,10 +307,6 @@ Command *SmallShell::CreateCommand(char *cmd_line)
     else if (firstWord == "whoami")
     {
         return new WhoAmICommand(cmd_line);
-    }
-    else if (firstWord == "netinfo")
-    {
-        return new NetInfo(cmd_line);
     }
 
     // if nothing else is matched, we treat as external command.
@@ -594,7 +586,7 @@ bool SmallShell::validCommand(string name)
 void SmallShell::createCommandVector()
 {
     commands = {"chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
-                "kill", "unalias", "alias", "unsetenv", "watchproc", "du", "netinfo"};
+                "kill", "unalias", "alias", "unsetenv", "du"};
 }
 
 void SmallShell::setAlias(string name, string command)
@@ -1034,151 +1026,6 @@ void ForegroundCommand::execute()
     }
     free_args(args, num_of_args);
 }
-
-/// helper functions for watchproc command
-
-static bool read_cpu_times(pid_t pid, long &utime, long &stime)
-{
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
-    int fd = open(path, O_RDONLY);
-    if (fd < 0)
-        return false;
-    char buf[2048];
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
-    close(fd);
-    if (n <= 0)
-        return false;
-    buf[n] = '\0';
-
-    // Skip pid
-    char *p = strchr(buf, ' ');
-    if (!p)
-        return false;
-    // Skip comm (up to ") ")
-    p = strchr(p + 1, ')');
-    if (!p)
-        return false;
-    p += 2; // skip ") "
-    // Skip state (field 3)
-    p = strchr(p, ' ');
-    if (!p)
-        return false;
-    // Skip fields 4–13
-    for (int i = 4; i <= 13; ++i)
-    {
-        p = strchr(p + 1, ' ');
-        if (!p)
-            return false;
-    }
-    // Field 14 = utime
-    utime = atol(p + 1);
-    // Skip utime
-    p = strchr(p + 1, ' ');
-    if (!p)
-        return false;
-    // Field 15 = stime
-    stime = atol(p + 1);
-    return true;
-}
-
-static bool read_rss_kb(pid_t pid, long &rss_kb)
-{
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d/status", pid);
-    int fd = open(path, O_RDONLY);
-    if (fd < 0)
-        return false;
-    char buf[4096];
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
-    close(fd);
-    if (n <= 0)
-        return false;
-    buf[n] = '\0';
-
-    char *line = strtok(buf, "\n");
-    while (line)
-    {
-        if (strncmp(line, "VmRSS:", 6) == 0)
-        {
-            char *q = line + 6;
-            while (*q == ' ' || *q == '\t')
-                ++q;
-            rss_kb = atol(q);
-            return true;
-        }
-        line = strtok(nullptr, "\n");
-    }
-    return false;
-}
-
-// Watchproc command
-WatchProcCommand::WatchProcCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
-
-void WatchProcCommand::execute()
-{
-    // parse args
-    char **args = init_args();
-    int num_args = _parseCommandLine(cmd_line, args);
-    if (!args)
-    {
-        std::cerr << "smash error: watchproc: memory allocation\n";
-        return;
-    }
-    if (num_args != 2 || !is_legit_num(args[1]))
-    {
-        std::cerr << "smash error: watchproc: invalid arguments\n";
-        free_args(args, num_args);
-        return;
-    }
-
-    // Use strtol to detect overflow
-    char *endptr;
-    long pid_long = strtol(args[1], &endptr, 10);
-
-    // Check for overflow or invalid range
-    if (pid_long > INT_MAX || pid_long < 0)
-    {
-        std::cerr << "smash error: watchproc: invalid arguments\n";
-        free_args(args, num_args);
-        return;
-    }
-
-    pid_t pid = static_cast<pid_t>(pid_long);
-    free_args(args, num_args);
-
-    // first sample
-    long ut1, st1, rss1;
-    if (!read_cpu_times(pid, ut1, st1) || !read_rss_kb(pid, rss1))
-    {
-        std::cerr << "smash error: watchproc: pid " << pid << " does not exist\n";
-        return;
-    }
-
-    // sleep 1 second
-    struct timespec req = {1, 0};
-    nanosleep(&req, nullptr);
-
-    // second sample
-    long ut2, st2, rss2;
-    if (!read_cpu_times(pid, ut2, st2) || !read_rss_kb(pid, rss2))
-    {
-        std::cerr << "smash error: watchproc: pid " << pid << " terminated\n";
-        return;
-    }
-
-    // compute CPU% over 1 sec and memory in MB
-    long ticks = sysconf(_SC_CLK_TCK);
-    long delta_ticks = (ut2 + st2) - (ut1 + st1);
-    double cpu_percent = (delta_ticks / static_cast<double>(ticks)) * 100.0;
-    double mem_mb = rss2 / 1024.0;
-
-    // print with cout
-    std::cout << "PID: " << pid
-              << " | CPU Usage: " << std::fixed << std::setprecision(1) << cpu_percent << "%"
-              << " | Memory Usage: " << std::fixed << std::setprecision(1) << mem_mb << " MB"
-              << std::endl;
-} // Need to check calculation of CPU time
 
 // Kill command
 KillCommand::KillCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
@@ -1854,155 +1701,4 @@ PipeCommand::~PipeCommand()
 {
     free(command1);
     free(command2);
-}
-
-// NetInfo command
-NetInfo::NetInfo(char *cmd_line) : Command(cmd_line) {}
-
-void NetInfo::execute()
-{
-    char **args = init_args();
-    int num_args = _parseCommandLine(cmd_line, args);
-    if (!args)
-    {
-        cerr << "smash error: netinfo: malloc failed" << endl;
-        return;
-    }
-    if (num_args == 1)
-    {
-        cerr << "smash error: netinfo: interface not specified" << endl;
-        free_args(args, num_args);
-        return;
-    }
-    string interface_info[3];
-    char *interface = args[1];
-    // Check if interface exists, and obtain ip and subnet
-    if (get_ip_and_subnet(interface, interface_info) == -1)
-    {
-        cerr << "smash error: netinfo: interface " << interface << " does not exist" << endl;
-        free_args(args, num_args);
-        return;
-    }
-    get_default_gateway(interface_info);
-    vector<string> dns_servers;
-    get_DNS_servers(dns_servers);
-
-    // Print info
-    cout << "IP Address: " << interface_info[0] << endl;
-    cout << "Subnet Mask: " << interface_info[1] << endl;
-    cout << "Default Gateway: " << interface_info[2] << endl;
-    cout << "DNS Servers: ";
-    for (int i = 0; i < dns_servers.size() - 1; i++)
-    {
-        cout << dns_servers[i] << ", ";
-    }
-    cout << dns_servers[dns_servers.size() - 1] << endl;
-}
-
-int get_ip_and_subnet(const char *interface, string to_fill[])
-{
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
-        // perror("smash error: NetInfo: socket creation failed");
-        return -1;
-    }
-
-    // Set the name to the given
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
-    // Obtain IP address
-    if (ioctl(sock, SIOCGIFADDR, &ifr) == -1)
-    {
-        // perror("smash error: NetInfo: ioctl failed");
-        return -1;
-    }
-    struct sockaddr_in *ipaddr = (struct sockaddr_in *)&ifr.ifr_addr;
-    to_fill[0] = inet_ntoa(ipaddr->sin_addr);
-
-    // Obtain subnet mask
-    if (ioctl(sock, SIOCGIFNETMASK, &ifr) == -1)
-    {
-        // perror("smash error: NetInfo: ioctl failed");
-        return -1;
-    }
-    struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_addr;
-    to_fill[1] = inet_ntoa(netmask->sin_addr);
-    close(sock);
-    return 0;
-}
-
-int get_default_gateway(string to_fill[])
-{
-    int fd = open("/proc/net/route", O_RDONLY);
-    if (fd < 0)
-    {
-        perror("smash error: open failed");
-        return -1;
-    }
-    // Read from the file to the buffer
-    char buffer[4096];
-    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-    if (bytes_read <= 0)
-    {
-        perror("smash error: read failed");
-        close(fd);
-        return -1;
-    }
-    buffer[bytes_read] = '\0';
-
-    // Split the buffer into lines
-    char *line = strtok(buffer, "\n");
-    while (line)
-    {
-        char iface[16], destination[16], gateway[16];
-
-        if (sscanf(line, "%15s %15s %15s", iface, destination, gateway) == 3)
-        {
-            if (strcmp(destination, "00000000") == 0)
-            {
-                unsigned long gw = strtoul(gateway, nullptr, 16);
-                struct in_addr addr;
-                addr.s_addr = gw;
-                to_fill[2] = inet_ntoa(addr);
-            }
-        }
-        line = strtok(nullptr, "\n");
-    }
-    close(fd);
-    return 0;
-}
-
-int get_DNS_servers(vector<string> &dns_servers)
-{
-    int fd = open("/etc/resolv.conf", O_RDONLY);
-    if (fd < 0)
-    {
-        perror("smash error: open failed");
-        return -1;
-    }
-
-    // Read from the file to the buffer
-    char buffer[4096];
-    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-    if (bytes_read <= 0)
-    {
-        perror("smash error: read failed");
-        close(fd);
-        return -1;
-    }
-    buffer[bytes_read] = '\0';
-
-    char *line = strtok(buffer, "\n");
-    while (line)
-    {
-        if (strncmp(line, "nameserver", 10) == 0 && (line[10] == ' ' || line[10] == '\t'))
-        {
-            dns_servers.emplace_back(line + 11);
-        }
-        line = strtok(nullptr, "\n");
-    }
-    close(fd);
-    return 0;
 }

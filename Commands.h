@@ -278,17 +278,18 @@ public:
     void execute() override;
 }; // DONE
 
-class WatchProcCommand : public BuiltInCommand
+/// TODOOOOO ///
+class SysInfoCommand : public BuiltInCommand
 {
 public:
-    WatchProcCommand(char *cmd_line);
+    SysInfoCommand();
 
-    virtual ~WatchProcCommand()
+    virtual ~SysInfoCommand()
     {
     }
 
     void execute() override;
-}; // DONE
+};
 
 /////////////////////////////--------------Special commands-------//////////////////////////////
 
@@ -409,16 +410,14 @@ public:
     void execute() override;
 };
 
-class NetInfo : public Command
+/// TODOOOOO ///
+class UsbInfoCommand : public Command
 {
-    // TODO: Add your data members **BONUS: 10 Points**
 public:
-    NetInfo(char *cmd_line);
-
-    virtual ~NetInfo()
+    UsbInfoCommand(char *cmd_line);
+    virtual ~UsbInfoCommand()
     {
     }
-
     void execute() override;
 };
 
