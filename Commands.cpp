@@ -1480,9 +1480,15 @@ void WhoAmICommand::execute()
 {
     // Get current user ID
     uid_t uid = getuid();
+
+    // Fix typo: git_t -> gid_t
+    gid_t gid = getgid();
+
     std::string uid_str = std::to_string(uid);
 
-    // Use environment variables if available (simplest approach)
+    // --- REMOVE THIS ENTIRE BLOCK ---
+    // The getenv() shortcut is no longer valid.
+    /*
     char *username_env = getenv("USER");
     char *home_env = getenv("HOME");
 
@@ -1491,6 +1497,8 @@ void WhoAmICommand::execute()
         std::cout << username_env << " " << home_env << std::endl;
         return;
     }
+    */
+    // --- END OF BLOCK TO REMOVE ---
 
     // If environment variables aren't available, read directly from /etc/passwd
     int fd = open("/etc/passwd", O_RDONLY);
@@ -1558,8 +1566,14 @@ void WhoAmICommand::execute()
             if (pos != std::string::npos)
             {
                 home_dir = entry.substr(0, pos);
+
+                // --- NEW OUTPUT FORMAT [cite: 423-425] ---
+                std::cout << uid << std::endl;
+                std::cout << gid << std::endl;
                 std::cout << username << " " << home_dir << std::endl;
-                return;
+                // --- END OF NEW FORMAT ---
+
+                return; // Found user, we are done
             }
         }
 
