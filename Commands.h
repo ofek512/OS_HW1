@@ -92,7 +92,7 @@ class SmallShell
 {
 private:
     map<string, string> aliasMap;
-    vector<string> sortedAlias;
+    vector<string> aliasCreationOrder;
     string prompt;
     char *prevWorkingDir;
     JobsList *jobList;

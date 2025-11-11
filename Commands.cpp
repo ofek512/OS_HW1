@@ -14,11 +14,7 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <net/if.h>
 
 using namespace std;
 
@@ -389,6 +385,9 @@ JobsList::JobsList() : jobsList(), job_map(), max_id(-1) {}
 void JobsList::printJobsList()
 {
     removeFinishedJobs();
+
+    jobsList.sort();
+
     for (JobsList::JobEntry *job : jobsList)
     {
         cout << "[" << job->jobId << "] " << job->command << endl; // TODO initialise job->command to have the name
@@ -510,24 +509,20 @@ void JobsList::removeJobById(int jobId)
 void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped)
 {
     removeFinishedJobs();
-    int it = 1;
-    while (job_map[it] != nullptr && it++ != 100)
-    {
-    }
+    int newJobId = (max_id == -1) ? 1 : max_id + 1;
 
-    if (it == 100)
+    if (newJobId > 100)
     {
         cerr << "addJob error: reached limit of processes" << endl;
         return;
     }
-    JobEntry *job_to_insert = new JobEntry(cmd, isStopped, it, pid, cmd->getCommandS()); // im not sure how to convert it to string correcrtly
-    job_map[it] = job_to_insert;
+    JobEntry *job_to_insert = new JobEntry(cmd, isStopped, newJobId, pid, cmd->getCommandS()); // im not sure how to convert it to string correcrtly
+
+    job_map[newJobId] = job_to_insert;
     jobsList.push_back(job_to_insert);
 
-    if (max_id < it)
-    {
-        max_id = it;
-    }
+    max_id = newJobId;
+
 } // need to check correctness
 
 bool JobsList::JobEntry::operator<(const JobsList::JobEntry &other) const
@@ -586,7 +581,7 @@ bool SmallShell::validCommand(string name)
 void SmallShell::createCommandVector()
 {
     commands = {"chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
-                "kill", "unalias", "alias", "unsetenv", "du"};
+                "kill", "sysinfo", "usbinfo", "unalias", "alias", "unsetenv", "du"};
 }
 
 void SmallShell::setAlias(string name, string command)
@@ -923,6 +918,10 @@ void UnSetEnvCommand::execute()
 // Jobs command
 void JobsCommand::execute()
 {
+    SmallShell::getInstance().getJobs()->removeFinishedJobs();
+
+    SmallShell::getInstance().getJobs()->jobsList.sort();
+
     SmallShell::getInstance().getJobs()->printJobsList();
 }
 
