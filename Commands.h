@@ -343,11 +343,13 @@ class DiskUsageCommand : public Command
 {
 private:
     std::unordered_set<ino_t> counted_inodes;
+
     long calculate_dir_size(const char *path)
     {
         struct stat st;
         if (lstat(path, &st) != 0)
         {
+            perror("smash error: lstat failed");
             return 0; // can't stat this entry
         }
 
@@ -363,38 +365,62 @@ private:
         // If it's a directory (and not a symlink) recurse into it
         if (S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode))
         {
-            DIR *dir = opendir(path);
-            if (!dir)
+            int fd = open(path, O_RDONLY | O_DIRECTORY);
+            if (fd < 0)
             {
+                perror("smash error: open failed");
                 return size;
             }
 
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL)
-            {
-                if (strcmp(entry->d_name, ".") == 0 ||
-                    strcmp(entry->d_name, "..") == 0)
-                {
-                    continue;
-                }
+            char buf[BUF_SIZE];
+            long bytes_read;
 
-                char child[PATH_MAX];
-                snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
-                size += calculate_dir_size(child);
+            // Use getdents64 instead of readdir
+            while ((bytes_read = syscall(SYS_getdents64, fd, buf, BUF_SIZE)) > 0)
+            {
+                for (long bpos = 0; bpos < bytes_read;)
+                {
+                    struct linux_dirent64 *d = (struct linux_dirent64 *)(buf + bpos);
+
+                    if (strcmp(d->d_name, ".") == 0 ||
+                        strcmp(d->d_name, "..") == 0)
+                    {
+                        bpos += d->d_reclen; // Move to next entry
+                        continue;
+                    }
+
+                    char child_path[PATH_MAX];
+                    snprintf(child_path, sizeof(child_path), "%s/%s", path, d->d_name);
+
+                    // Recurse
+                    size += calculate_dir_size(child_path);
+
+                    bpos += d->d_reclen; // Move to next entry
+                }
             }
-            closedir(dir);
+
+            close(fd);
+
+            if (bytes_read < 0)
+            {
+                perror("smash error: getdents64 failed");
+            }
         }
 
         return size;
     }
 
 public:
-    DiskUsageCommand(char *cmd_line);
+    DiskUsageCommand(char *cmd_line) : Command(cmd_line)
+    {
+        createSegments(cmd_line, cmd_segments);
+    }
 
     virtual ~DiskUsageCommand()
     {
     }
 
+    // execute() method in Commands.cpp does not need to be changed.
     void execute() override;
 };
 
