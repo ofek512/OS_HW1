@@ -15,6 +15,24 @@ using namespace std;
 #include <iostream>
 #include <cstring>
 #include <limits.h>
+#include <time.h>
+#include <algorithm>
+
+#define _GNU_SOURCE
+#include <fcntl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+struct linux_dirent64
+{
+    ino64_t d_ino;           /* 64-bit inode number */
+    off64_t d_off;           /* 64-bit offset to next structure */
+    unsigned short d_reclen; /* Size of this dirent */
+    unsigned char d_type;    /* File type */
+    char d_name[];           /* Filename (null-terminated) */
+};
+
+#define BUF_SIZE 1024 * 32
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -143,7 +161,15 @@ public:
     virtual ~BuiltInCommand()
     {
     }
-}; // TODO: Maybe remove '&' in constructor?
+};
+
+class SysInfoCommand : public BuiltInCommand
+{
+public:
+    SysInfoCommand(char *cmd_line);
+    virtual ~SysInfoCommand() {}
+    void execute() override;
+};
 
 class ChpromptCommand : public BuiltInCommand
 {
@@ -292,6 +318,51 @@ public:
 };
 
 /////////////////////////////--------------Special commands-------//////////////////////////////
+
+class UsbInfoCommand : public Command
+{
+private:
+    // Helper struct to store data for sorting
+    struct UsbDevice
+    {
+        int devnum;
+        string id;
+        string manufacturer;
+        string product;
+        string max_power;
+
+        // Comparison operator for sorting by device number
+        bool operator<(const UsbDevice &other) const
+        {
+            return devnum < other.devnum;
+        }
+    };
+
+    // Helper function to read a file from /sys
+    // NOTE: This assumes you have the _trim function available,
+    // which is defined at the top of your Commands.cpp
+    string read_sys_file(const string &path)
+    {
+        int fd = open(path.c_str(), O_RDONLY);
+        if (fd < 0)
+            return "N/A";
+
+        char buf[256];
+        ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        close(fd);
+
+        if (n <= 0)
+            return "N/A";
+
+        buf[n] = '\0';
+        return _trim(string(buf)); // Using your existing _trim function
+    }
+
+public:
+    UsbInfoCommand(char *cmd_line);
+    virtual ~UsbInfoCommand() {}
+    void execute() override;
+};
 
 class RedirectionCommand : public Command
 {

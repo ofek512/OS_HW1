@@ -15,6 +15,9 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <sys/utsname.h>
+#include <time.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -303,6 +306,14 @@ Command *SmallShell::CreateCommand(char *cmd_line)
     else if (firstWord == "whoami")
     {
         return new WhoAmICommand(cmd_line);
+    }
+    else if (firstWord == "sysinfo")
+    {
+        return new SysInfoCommand(cmd_line);
+    }
+    else if (firstWord == "usbinfo")
+    {
+        return new UsbInfoCommand(cmd_line);
     }
 
     // if nothing else is matched, we treat as external command.
@@ -927,7 +938,6 @@ void UnSetEnvCommand::execute()
         }
     }
 
-    // --- Old logic: Remove variables (this part is OK) ---
     extern char **environ;
     for (size_t i = 1; i < cmd_segments.size(); ++i)
     {
@@ -1139,6 +1149,69 @@ void KillCommand::execute()
     free_args(args, num_of_args);
 }
 
+SysInfoCommand::SysInfoCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void SysInfoCommand::execute()
+{
+    [cite_start] // Arguments are ignored [cite: 318]
+
+        // 1. Get System, Hostname, Kernel, and Architecture
+        struct utsname sys_info;
+    if (uname(&sys_info) == -1)
+    {
+        perror("smash error: uname failed");
+        return;
+    }
+
+    // 2. Get Boot Time from /proc/stat
+    int fd = open("/proc/stat", O_RDONLY);
+    if (fd < 0)
+    {
+        perror("smash error: open failed");
+        return;
+    }
+
+    char buffer[2048]; // Buffer to read /proc/stat
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    close(fd);
+
+    if (bytes_read <= 0)
+    {
+        perror("smash error: read failed");
+        return;
+    }
+    buffer[bytes_read] = '\0'; // Null-terminate the buffer
+
+    // Find the "btime" line
+    char *btime_line = strstr(buffer, "btime ");
+    if (btime_line == nullptr)
+    {
+        cerr << "smash error: could not parse /proc/stat for btime" << endl;
+        return;
+    }
+
+    long unsigned btime_stamp;
+    if (sscanf(btime_line, "btime %lu", &btime_stamp) != 1)
+    {
+        cerr << "smash error: could not parse btime value" << endl;
+        return;
+    }
+
+    // Format the timestamp
+    time_t boot_time = (time_t)btime_stamp;
+    struct tm *tm_info = localtime(&boot_time);
+
+    char time_str[100];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+
+    // 3. Print all information
+    cout << "System: " << sys_info.sysname << endl;
+    cout << "Hostname: " << sys_info.nodename << endl;
+    cout << "Kernel: " << sys_info.release << endl;
+    cout << "Architecture: " << sys_info.machine << endl;
+    cout << "Boot Time: " << time_str << endl;
+}
+
 /////////////////////////////--------------External commands-------//////////////////////////////
 
 ExternalCommand::ExternalCommand(char *cmd_line) : Command(cmd_line)
@@ -1321,6 +1394,104 @@ void ComplexExternalCommand::execute()
     }
 }
 /////////////////////////////--------------Special commands-------//////////////////////////////
+
+UsbInfoCommand::UsbInfoCommand(char *cmd_line) : Command(cmd_line)
+{
+    // This uses the createSegments from the parent Command class
+    createSegments(cmd_line, cmd_segments);
+}
+
+void UsbInfoCommand::execute()
+{
+    [cite_start] // Arguments are ignored [cite: 444]
+        vector<UsbDevice>
+            devices;
+    const char *base_path = "/sys/bus/usb/devices";
+
+    int dir_fd = open(base_path, O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0)
+    {
+        perror("smash error: open failed");
+        return;
+    }
+
+    char buf[BUF_SIZE];
+    long bytes_read;
+
+    // Use getdents64 to read directory entries
+    while ((bytes_read = syscall(SYS_getdents64, dir_fd, buf, BUF_SIZE)) > 0)
+    {
+        for (long bpos = 0; bpos < bytes_read;)
+        {
+            struct linux_dirent64 *d = (struct linux_dirent64 *)(buf + bpos);
+            bpos += d->d_reclen; // Move to next entry
+
+            // Skip . and ..
+            if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
+            {
+                continue;
+            }
+
+            // Check if this entry is a real device by checking for 'devnum'
+            string dev_path = string(base_path) + "/" + d->d_name;
+            string devnum_path = dev_path + "/devnum";
+
+            string devnum_str = read_sys_file(devnum_path); // Using helper from .h file
+
+            if (devnum_str == "N/A")
+            {
+                // This isn't a device directory (e.g., it's "usb1", not "1-1")
+                continue;
+            }
+
+            // This is a real device, collect its info
+            UsbDevice dev;
+            try
+            {
+                dev.devnum = stoi(devnum_str);
+            }
+            catch (...)
+            {
+                continue; // Skip if devnum isn't a number
+            }
+
+            string vendor = read_sys_file(dev_path + "/idVendor");
+            string product_id = read_sys_file(dev_path + "/idProduct");
+
+            dev.id = vendor + ":" + product_id;
+            dev.manufacturer = read_sys_file(dev_path + "/manufacturer");
+            dev.product = read_sys_file(dev_path + "/product");
+            dev.max_power = read_sys_file(dev_path + "/bMaxPower");
+
+            devices.push_back(dev);
+        }
+    }
+    close(dir_fd);
+
+    if (bytes_read < 0)
+    {
+        perror("smash error: getdents64 failed");
+        return;
+    }
+
+    // Check if any devices were found
+    if (devices.empty())
+    {
+        [cite_start] cerr << "smash error: usbinfo: no USB devices found" << endl;
+        [cite:446] return;
+    }
+
+    // Sort devices by device number
+    std::sort(devices.begin(), devices.end());
+
+    // Print all devices in the correct format
+    for (const auto &dev : devices)
+    {
+        cout << "Device " << dev.devnum << ": ID " << dev.id << " "
+             << dev.manufacturer << " " << dev.product
+             << " MaxPower: " << dev.max_power << endl;
+    }
+}
 
 // Redirection command
 RedirectionCommand::RedirectionCommand(char *cmd_line, command_type type) : Command(cmd_line), type(type)
