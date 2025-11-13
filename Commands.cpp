@@ -769,7 +769,7 @@ void AliasCommand::execute()
     fullCommand = _trim(fullCommand);
 
     // Keep the ^ anchor but make the pattern more flexible for internal spacing
-    static const std::regex aliasPattern("^alias [a-zA-Z0-9_]+='[^']*'$");
+    static const std::regex aliasPattern("^alias ([a-zA-Z0-9_]+)='([^']*)'$");
 
     std::smatch matches;
     bool matched = std::regex_search(fullCommand, matches, aliasPattern);
