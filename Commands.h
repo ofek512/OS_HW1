@@ -304,18 +304,6 @@ public:
     void execute() override;
 }; // DONE
 
-/// TODOOOOO ///
-class SysInfoCommand : public BuiltInCommand
-{
-public:
-    SysInfoCommand();
-
-    virtual ~SysInfoCommand()
-    {
-    }
-
-    void execute() override;
-};
 
 /////////////////////////////--------------Special commands-------//////////////////////////////
 
@@ -341,22 +329,7 @@ private:
     // Helper function to read a file from /sys
     // NOTE: This assumes you have the _trim function available,
     // which is defined at the top of your Commands.cpp
-    string read_sys_file(const string &path)
-    {
-        int fd = open(path.c_str(), O_RDONLY);
-        if (fd < 0)
-            return "N/A";
-
-        char buf[256];
-        ssize_t n = read(fd, buf, sizeof(buf) - 1);
-        close(fd);
-
-        if (n <= 0)
-            return "N/A";
-
-        buf[n] = '\0';
-        return _trim(string(buf)); // Using your existing _trim function
-    }
+    string read_sys_file(const string &path);
 
 public:
     UsbInfoCommand(char *cmd_line);
@@ -482,10 +455,7 @@ private:
     }
 
 public:
-    DiskUsageCommand(char *cmd_line) : Command(cmd_line)
-    {
-        createSegments(cmd_line, cmd_segments);
-    }
+    DiskUsageCommand(char *cmd_line);
 
     virtual ~DiskUsageCommand()
     {
@@ -504,17 +474,6 @@ public:
     {
     }
 
-    void execute() override;
-};
-
-/// TODOOOOO ///
-class UsbInfoCommand : public Command
-{
-public:
-    UsbInfoCommand(char *cmd_line);
-    virtual ~UsbInfoCommand()
-    {
-    }
     void execute() override;
 };
 

@@ -191,7 +191,7 @@ string SmallShell::getPrompt() const
 
 // JobsList SmallShell::jobList;
 
-SmallShell::SmallShell() : aliasMap(), sortedAlias(), prompt("smash"), current_process(-1), prevWorkingDir(nullptr),
+SmallShell::SmallShell() : aliasMap(), aliasCreationOrder(), prompt("smash"), current_process(-1), prevWorkingDir(nullptr),
                            jobList(new JobsList()), commands(), pid(getpid())
 {
     createCommandVector();
@@ -1153,8 +1153,6 @@ SysInfoCommand::SysInfoCommand(char *cmd_line) : BuiltInCommand(cmd_line) {}
 
 void SysInfoCommand::execute()
 {
-    [cite_start] // Arguments are ignored [cite: 318]
-
         // 1. Get System, Hostname, Kernel, and Architecture
         struct utsname sys_info;
     if (uname(&sys_info) == -1)
@@ -1171,7 +1169,7 @@ void SysInfoCommand::execute()
         return;
     }
 
-    char buffer[2048]; // Buffer to read /proc/stat
+    char buffer[8192]; // Buffer to read /proc/stat
     ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     close(fd);
 
@@ -1181,7 +1179,6 @@ void SysInfoCommand::execute()
         return;
     }
     buffer[bytes_read] = '\0'; // Null-terminate the buffer
-
     // Find the "btime" line
     char *btime_line = strstr(buffer, "btime ");
     if (btime_line == nullptr)
@@ -1401,11 +1398,24 @@ UsbInfoCommand::UsbInfoCommand(char *cmd_line) : Command(cmd_line)
     createSegments(cmd_line, cmd_segments);
 }
 
+string UsbInfoCommand::read_sys_file(const string &path){
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
+        return "N/A";
+
+    char buf[256];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+
+    if (n <= 0)
+        return "N/A";
+
+    buf[n] = '\0';
+    return _trim(string(buf)); // Using your existing _trim function
+}
 void UsbInfoCommand::execute()
 {
-    [cite_start] // Arguments are ignored [cite: 444]
-        vector<UsbDevice>
-            devices;
+    vector<UsbDevice> devices;
     const char *base_path = "/sys/bus/usb/devices";
 
     int dir_fd = open(base_path, O_RDONLY | O_DIRECTORY);
@@ -1477,8 +1487,8 @@ void UsbInfoCommand::execute()
     // Check if any devices were found
     if (devices.empty())
     {
-        [cite_start] cerr << "smash error: usbinfo: no USB devices found" << endl;
-        [cite:446] return;
+        cerr << "smash error: usbinfo: no USB devices found" << endl;
+        return;
     }
 
     // Sort devices by device number
